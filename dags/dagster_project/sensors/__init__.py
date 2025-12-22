@@ -1,5 +1,7 @@
 """Dagster sensors for renewable energy pipeline."""
 
+# ruff: noqa: I001
+
 import sys
 from pathlib import Path
 
@@ -9,7 +11,6 @@ from dagster import RunRequest, SensorEvaluationContext, sensor
 sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
 
 from src.config import config
-
 from dags.dagster_project.jobs import daily_ingestion_job
 
 

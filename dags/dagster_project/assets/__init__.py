@@ -4,13 +4,12 @@ import sys
 from pathlib import Path
 
 from dagster import AssetExecutionContext, asset
-from dagster_dbt import DbtCliResource, dbt_assets
 
 # Add src to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
 
 from src.config import config
-from src.loaders import run_full_ingestion
+from src.loaders import run_generation_ingestion, run_weather_ingestion
 from src.utils import get_logger
 
 logger = get_logger(__name__)
@@ -40,9 +39,6 @@ def combined_ingestion_asset(context: AssetExecutionContext) -> None:
     context.log.info("Starting combined data ingestion")
 
     try:
-        # Import here to avoid circular imports
-        from src.loaders import run_weather_ingestion, run_generation_ingestion
-
         # Run weather ingestion first
         context.log.info("Running weather data ingestion")
         run_weather_ingestion()
@@ -85,8 +81,6 @@ def weather_asset(context: AssetExecutionContext) -> None:
     """
     context.log.warning("weather_asset is deprecated. Use combined_ingestion_asset instead.")
 
-    from src.loaders import run_weather_ingestion
-
     try:
         run_weather_ingestion()
         context.log.info("Weather data ingestion completed successfully")
@@ -118,8 +112,6 @@ def generation_asset(context: AssetExecutionContext) -> None:
 
     """
     context.log.warning("generation_asset is deprecated. Use combined_ingestion_asset instead.")
-
-    from src.loaders import run_generation_ingestion
 
     try:
         run_generation_ingestion()

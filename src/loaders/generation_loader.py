@@ -76,7 +76,7 @@ def load_generation_parquet(
             raise
 
     logger.info(
-        f"Completed loading generation data",
+        "Completed loading generation data",
         extra={
             "extra_fields": {
                 "files_processed": len(file_paths),

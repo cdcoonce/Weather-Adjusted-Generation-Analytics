@@ -1,7 +1,5 @@
 """Polars utility functions for renewable energy data processing."""
 
-from typing import Any
-
 import polars as pl
 
 

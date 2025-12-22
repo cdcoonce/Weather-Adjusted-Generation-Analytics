@@ -76,7 +76,7 @@ def load_weather_parquet(
             raise
 
     logger.info(
-        f"Completed loading weather data",
+        "Completed loading weather data",
         extra={
             "extra_fields": {
                 "files_processed": len(file_paths),
