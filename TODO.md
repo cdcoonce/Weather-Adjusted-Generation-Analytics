@@ -29,6 +29,10 @@ This file tracks the repo’s current work.
   - Data flow (mock → parquet → dlt → duckdb → dbt → marts)
   - Where schemas live and how to query them
 
+- [x] Add GitHub Actions CI:
+  - Ruff lint (focused rules) on `src/` + `dags/`
+  - Pytest unit + integration suites
+
 ## Next
 
 - [ ] Increase unit coverage for `src/mock_data/`:
@@ -41,6 +45,8 @@ This file tracks the repo’s current work.
 - [ ] CI improvements:
   - [ ] (Optional) Add a Python version matrix if we want earlier signal on 3.13.
   - [ ] Consider splitting unit vs integration into parallel jobs (already separated).
+  - [ ] Enable branch protection requiring CI checks (GitHub settings).
+  - [ ] Migrate Ruff config in `pyproject.toml` to `tool.ruff.lint` to remove deprecation warnings.
 
 ## Later
 
