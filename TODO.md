@@ -15,8 +15,8 @@ This file tracks the repo’s current work.
   - [x] `solar_power_output()` scaling + clipping.
 
 - [ ] Increase coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
-  - [ ] Unit-test `run_full_ingestion()` call order via mocking.
-  - [ ] Unit-test `run_combined_pipeline()` success and failure cases.
+  - [x] Unit-test `run_full_ingestion()` call order via mocking.
+  - [x] Unit-test `run_combined_pipeline()` success and failure cases.
 
 - [ ] CI improvements:
   - [ ] Add caching for uv/pip and dbt packages.
