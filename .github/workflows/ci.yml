@@ -20,7 +20,7 @@ jobs:
       - name: Install dependencies
         run: uv sync --extra dev
       - name: Ruff check
-        run: uv run ruff check src dags --select F,E9,I
+        run: uv run ruff check weather_adjusted_generation_analytics dags --select F,E9,I
 
   unit:
     name: Unit tests

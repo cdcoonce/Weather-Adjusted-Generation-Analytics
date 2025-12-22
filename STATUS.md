@@ -13,6 +13,7 @@ Current project status for humans and future agents.
 - ✅ CI is enabled via GitHub Actions:
   - Lint: Ruff (focused rules) on `weather_adjusted_generation_analytics/` and `dags/`
   - Tests: unit → integration
+- ✅ Canonical Python package is `weather_adjusted_generation_analytics/` (legacy `src/` removed; no runtime `sys.path` hacks).
 
 ## CI details
 

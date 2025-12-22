@@ -33,6 +33,11 @@ This file tracks the repo’s current work.
   - Ruff lint (focused rules) on `weather_adjusted_generation_analytics/` + `dags/`
   - Pytest unit + integration suites
 
+- [x] Migrate imports to a canonical package:
+  - `weather_adjusted_generation_analytics/` is the canonical Python package.
+  - Removed the legacy `src/` tree (no compatibility layer).
+  - Dagster code does not mutate `sys.path`.
+
 ## Next
 
 - [ ] Increase unit coverage for `weather_adjusted_generation_analytics/mock_data/`:

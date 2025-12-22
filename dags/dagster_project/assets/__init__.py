@@ -3,7 +3,10 @@
 from dagster import AssetExecutionContext, asset
 
 from weather_adjusted_generation_analytics.config import config
-from weather_adjusted_generation_analytics.loaders import run_generation_ingestion, run_weather_ingestion
+from weather_adjusted_generation_analytics.loaders import (
+    run_generation_ingestion,
+    run_weather_ingestion,
+)
 from weather_adjusted_generation_analytics.utils import get_logger
 
 logger = get_logger(__name__)

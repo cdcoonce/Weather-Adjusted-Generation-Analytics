@@ -15,6 +15,7 @@ This file is the repository decision log.
 - D-0002: Test strategy (markers + warnings-as-errors)
 - D-0003: Integration test strategy (temp DuckDB + temp dbt profiles)
 - D-0004: Python version policy (Python 3.12+)
+- D-0005: Canonical Python package + import strategy
 
 ---
 
@@ -118,3 +119,27 @@ This file is the repository decision log.
   - `uv run pytest -m unit`
   - `uv run pytest -m integration`
   - `uv run pytest`
+
+---
+
+## D-0005 — Canonical Python package + import strategy
+
+- **Status:** Accepted
+- **Date:** 2025-12-21
+
+### D-0005 Context
+
+- The repo previously relied on importing from a top-level `src` package and/or mutating `sys.path` in Dagster modules.
+- This was brittle across execution contexts (Dagster working directory, PYTHONPATH differences) and obscured the canonical API surface.
+
+### D-0005 Decision
+
+- The canonical import root is the real package: `weather_adjusted_generation_analytics`.
+- Dagster modules MUST NOT mutate `sys.path` to make imports work.
+- The legacy `src/` package is removed (no compatibility alias) to prevent drift.
+
+### D-0005 Consequences
+
+- All internal imports MUST use `weather_adjusted_generation_analytics.*`.
+- Tooling (pytest coverage, CI lint targets, docs) MUST reference `weather_adjusted_generation_analytics/`.
+- Any new modules MUST be added under `weather_adjusted_generation_analytics/`.
