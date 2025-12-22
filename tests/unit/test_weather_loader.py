@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from dlt.extract.exceptions import ResourceExtractionError
 
-from src.loaders import weather_loader
+from weather_adjusted_generation_analytics.loaders import weather_loader
 from tests.fixtures.parquet_builders import write_parquet
 
 

@@ -11,7 +11,7 @@ Standardize how we patch loader modules so tests remain stable and easy to maint
 Patch the symbol **as imported by the module under test**, not the original location.
 
 Examples:
-- For `run_full_ingestion()` in `src/loaders/dlt_pipeline.py`:
+- For `run_full_ingestion()` in `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
   - patch `src.loaders.dlt_pipeline.run_weather_ingestion`
   - patch `src.loaders.dlt_pipeline.run_generation_ingestion`
   - patch `src.loaders.dlt_pipeline.config.ensure_directories`

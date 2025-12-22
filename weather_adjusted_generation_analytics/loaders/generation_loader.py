@@ -6,8 +6,8 @@ from typing import Iterator
 import dlt
 import polars as pl
 
-from src.config import config
-from src.utils import get_logger
+from weather_adjusted_generation_analytics.config import config
+from weather_adjusted_generation_analytics.utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -38,15 +38,6 @@ def load_generation_parquet(
     dict
         Generation record as dictionary
 
-    Examples
-    --------
-    >>> pipeline = dlt.pipeline(
-    ...     pipeline_name="generation_ingestion",
-    ...     destination="duckdb",
-    ...     dataset_name="renewable_energy"
-    ... )
-    >>> load_info = pipeline.run(load_generation_parquet())
-
     """
     if file_paths is None:
         file_paths = sorted(config.generation_raw_path.glob("generation_*.parquet"))
@@ -58,21 +49,15 @@ def load_generation_parquet(
     for file_path in file_paths:
         try:
             logger.info(f"Reading {file_path.name}")
-
-            # Read Parquet file with Polars
             df = pl.read_parquet(file_path)
-
-            # Convert to records (list of dicts)
             records = df.to_dicts()
-
             total_rows += len(records)
 
-            # Yield each record
             for record in records:
                 yield record
 
-        except Exception as e:
-            logger.error(f"Error reading {file_path}: {e}", exc_info=True)
+        except Exception as exc:
+            logger.error(f"Error reading {file_path}: {exc}", exc_info=True)
             raise
 
     logger.info(
@@ -87,16 +72,8 @@ def load_generation_parquet(
 
 
 def get_generation_pipeline() -> dlt.Pipeline:
-    """
-    Create and configure dlt pipeline for generation data ingestion.
-
-    Returns
-    -------
-    dlt.Pipeline
-        Configured dlt pipeline instance
-
-    """
-    pipeline = dlt.pipeline(
+    """Create and configure dlt pipeline for generation data ingestion."""
+    return dlt.pipeline(
         pipeline_name=f"{config.dlt_pipeline_name}_generation",
         destination=dlt.destinations.duckdb(
             credentials=str(config.duckdb_path),
@@ -105,14 +82,10 @@ def get_generation_pipeline() -> dlt.Pipeline:
         progress="log",
     )
 
-    return pipeline
-
 
 def run_generation_ingestion(file_paths: list[Path] | None = None) -> None:
     """
     Execute generation data ingestion pipeline.
-
-    Loads generation data from Parquet files into DuckDB using dlt.
 
     Parameters
     ----------
@@ -127,10 +100,7 @@ def run_generation_ingestion(file_paths: list[Path] | None = None) -> None:
     logger.info("Starting generation data ingestion")
 
     try:
-        # Get pipeline
         pipeline = get_generation_pipeline()
-
-        # Run pipeline
         load_info = pipeline.run(
             load_generation_parquet(file_paths=file_paths),
             loader_file_format="jsonl",
@@ -146,19 +116,24 @@ def run_generation_ingestion(file_paths: list[Path] | None = None) -> None:
             },
         )
 
-        # Log load info details
         if load_info.has_failed_jobs:
             logger.error("Generation ingestion had failures")
             for package in load_info.load_packages:
                 for job in package.jobs["failed_jobs"]:
-                    logger.error(f"Failed job: {job.job_file_path} - {job.failed_message}")
+                    logger.error(
+                        f"Failed job: {job.job_file_path} - {job.failed_message}"
+                    )
         else:
             logger.info("All generation data loaded successfully")
 
-    except Exception as e:
-        logger.error(f"Generation ingestion failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Generation ingestion failed: {exc}", exc_info=True)
         raise
 
 
-if __name__ == "__main__":
-    run_generation_ingestion()
+__all__ = [
+    "get_generation_pipeline",
+    "load_generation_parquet",
+    "run_generation_ingestion",
+]
+

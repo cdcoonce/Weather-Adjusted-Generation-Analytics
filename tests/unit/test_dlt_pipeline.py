@@ -12,7 +12,7 @@ from unittest.mock import call
 
 import pytest
 
-from src.loaders import dlt_pipeline
+from weather_adjusted_generation_analytics.loaders import dlt_pipeline
 
 
 @pytest.mark.unit

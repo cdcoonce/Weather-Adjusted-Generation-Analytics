@@ -1,7 +1,7 @@
-"""Utilities package for renewable performance pipeline."""
+"""Utilities shim for weather_adjusted_generation_analytics."""
 
-from src.utils.logging_utils import get_logger, log_execution_time
-from src.utils.polars_utils import (
+from .logging_utils import get_logger, log_execution_time
+from .polars_utils import (
     add_lag_features,
     add_lead_features,
     add_rolling_stats,

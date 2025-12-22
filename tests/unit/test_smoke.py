@@ -6,12 +6,12 @@ from pathlib import Path
 
 import pytest
 
-from src.config.settings import Config
+from weather_adjusted_generation_analytics.config.settings import Config
 
 
 @pytest.mark.unit
-def test_pytest_discovers_and_imports_src(temp_config: Config) -> None:
-    """Prove pytest discovery works and `src` imports resolve.
+def test_pytest_discovers_and_imports_package(temp_config: Config) -> None:
+    """Prove pytest discovery works and core imports resolve.
 
     This intentionally avoids hitting external systems (DuckDB, dlt, dbt, Dagster).
     """

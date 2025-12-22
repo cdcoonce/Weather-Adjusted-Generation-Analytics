@@ -29,10 +29,10 @@ Generate 2 years of hourly weather and generation data for 10 assets:
 
 ```bash
 # Generate weather data (~730 daily files)
-uv run python src/mock_data/generate_weather.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_weather.py
 
 # Generate generation data (~730 daily files)
-uv run python src/mock_data/generate_generation.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_generation.py
 ```
 
 **Expected output**: ~17,520 hours × 10 assets = 175,200 rows per dataset
@@ -42,7 +42,7 @@ uv run python src/mock_data/generate_generation.py
 Load the Parquet files into DuckDB:
 
 ```bash
-uv run python src/loaders/dlt_pipeline.py
+uv run python weather_adjusted_generation_analytics/loaders/dlt_pipeline.py
 ```
 
 This will:
@@ -136,11 +136,11 @@ renewable_performance_pipeline/
 │   ├── jobs/                 # Job definitions
 │   ├── schedules/            # Schedules
 │   └── sensors/              # Sensors
-├── src/                      # Python source code
-│   ├── config/               # Configuration
-│   ├── loaders/              # dlt pipelines
-│   ├── mock_data/            # Data generators
-│   └── utils/                # Utilities
+├── weather_adjusted_generation_analytics/  # Python source code
+│   ├── config/                           # Configuration
+│   ├── loaders/                          # dlt pipelines
+│   ├── mock_data/                        # Data generators
+│   └── utils/                            # Utilities
 └── notebooks/                # Jupyter notebooks
 ```
 
@@ -162,10 +162,10 @@ uv run dbt run --select stg_weather
 uv run dbt run --select marts
 
 # Run dlt for specific files
-uv run python src/loaders/weather_loader.py
+uv run python weather_adjusted_generation_analytics/loaders/weather_loader.py
 
 # Run correlation analysis
-uv run python -c "from src.loaders import verify_ingestion; verify_ingestion()"
+uv run python -c "from weather_adjusted_generation_analytics.loaders import verify_ingestion; verify_ingestion()"
 ```
 
 ### Query DuckDB Directly
@@ -190,7 +190,7 @@ SELECT * FROM marts.mart_asset_performance_daily LIMIT 10;
 
 **Solution**: Ensure you're using `uv run` to execute scripts:
 ```bash
-uv run python src/mock_data/generate_weather.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_weather.py
 ```
 
 ### Issue: dbt cannot find profiles

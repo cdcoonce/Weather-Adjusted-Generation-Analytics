@@ -10,11 +10,11 @@ This file tracks the repo’s current work.
 
 ## Now
 
-- [ ] Add focused unit tests for `src/mock_data/`:
+- [ ] Add focused unit tests for `weather_adjusted_generation_analytics/mock_data/`:
   - [x] `wind_power_curve()` edge points (cut-in/rated/cut-out).
   - [x] `solar_power_output()` scaling + clipping.
 
-- [ ] Increase coverage for `src/loaders/dlt_pipeline.py`:
+- [ ] Increase coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
   - [ ] Unit-test `run_full_ingestion()` call order via mocking.
   - [ ] Unit-test `run_combined_pipeline()` success and failure cases.
 
@@ -30,16 +30,16 @@ This file tracks the repo’s current work.
   - Where schemas live and how to query them
 
 - [x] Add GitHub Actions CI:
-  - Ruff lint (focused rules) on `src/` + `dags/`
+  - Ruff lint (focused rules) on `weather_adjusted_generation_analytics/` + `dags/`
   - Pytest unit + integration suites
 
 ## Next
 
-- [ ] Increase unit coverage for `src/mock_data/`:
+- [ ] Increase unit coverage for `weather_adjusted_generation_analytics/mock_data/`:
   - [ ] Add tests for `generate_weather_data()` output shape and value bounds.
   - [ ] Add tests for `generate_generation_data()` determinism on a small date range.
 
-- [ ] Increase coverage for `src/loaders/dlt_pipeline.py`:
+- [ ] Increase coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
   - [ ] Decide whether `verify_ingestion()` should be schema-agnostic (likely yes).
 
 - [ ] CI improvements:

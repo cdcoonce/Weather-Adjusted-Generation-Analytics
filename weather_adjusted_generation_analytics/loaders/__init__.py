@@ -1,16 +1,16 @@
-"""Data loaders package for dlt ingestion."""
+"""Loaders subpackage shim for weather_adjusted_generation_analytics."""
 
-from src.loaders.dlt_pipeline import (
+from .dlt_pipeline import (
     run_combined_pipeline,
     run_full_ingestion,
     verify_ingestion,
 )
-from src.loaders.generation_loader import (
+from .generation_loader import (
     get_generation_pipeline,
     load_generation_parquet,
     run_generation_ingestion,
 )
-from src.loaders.weather_loader import (
+from .weather_loader import (
     get_weather_pipeline,
     load_weather_parquet,
     run_weather_ingestion,

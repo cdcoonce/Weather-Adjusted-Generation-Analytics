@@ -32,8 +32,8 @@ uv run pytest -m "unit and not io"
 
 ## Coverage expectations
 - Coverage should increase meaningfully for:
-  - `src/config/settings.py`
-  - `src/utils/polars_utils.py`
-  - `src/utils/logging_utils.py`
+  - `weather_adjusted_generation_analytics/config/settings.py`
+  - `weather_adjusted_generation_analytics/utils/polars_utils.py`
+  - `weather_adjusted_generation_analytics/utils/logging_utils.py`
 
 We do not set a minimum threshold yet; that comes when CI is introduced.

@@ -167,13 +167,13 @@ Dagster Orchestration + Jupyter Analysis
 
 ### 2. **Generate Data**
 ```bash
-uv run python src/mock_data/generate_weather.py
-uv run python src/mock_data/generate_generation.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_weather.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_generation.py
 ```
 
 ### 3. **Ingest Data**
 ```bash
-uv run python src/loaders/dlt_pipeline.py
+uv run python weather_adjusted_generation_analytics/loaders/dlt_pipeline.py
 ```
 
 ### 4. **Transform Data**

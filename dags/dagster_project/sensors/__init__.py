@@ -2,15 +2,9 @@
 
 # ruff: noqa: I001
 
-import sys
-from pathlib import Path
-
 from dagster import RunRequest, SensorEvaluationContext, sensor
 
-# Add src to path
-sys.path.insert(0, str(Path(__file__).parent.parent.parent.parent / "src"))
-
-from src.config import config
+from weather_adjusted_generation_analytics.config import config
 from dags.dagster_project.jobs import daily_ingestion_job
 
 

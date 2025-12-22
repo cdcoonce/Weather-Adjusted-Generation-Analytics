@@ -1,7 +1,7 @@
 # Phase 3.3 — `logging_utils` Unit Tests
 
 ## Objective
-Validate structured logging behavior in `src/utils/logging_utils.py`.
+Validate structured logging behavior in `weather_adjusted_generation_analytics/utils/logging_utils.py`.
 
 ## Where tests should live
 - `tests/unit/test_logging_utils.py`

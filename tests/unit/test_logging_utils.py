@@ -1,4 +1,4 @@
-"""Unit tests for `src.utils.logging_utils`."""
+"""Unit tests for `weather_adjusted_generation_analytics.utils.logging_utils`."""
 
 from __future__ import annotations
 
@@ -9,7 +9,11 @@ from pathlib import Path
 
 import pytest
 
-from src.utils.logging_utils import JSONFormatter, get_logger, log_execution_time
+from weather_adjusted_generation_analytics.utils.logging_utils import (
+    JSONFormatter,
+    get_logger,
+    log_execution_time,
+)
 
 
 @pytest.mark.unit

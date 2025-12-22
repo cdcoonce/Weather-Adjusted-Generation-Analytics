@@ -4,16 +4,16 @@ from pathlib import Path
 
 import dlt
 
-from src.config import config
-from src.loaders.generation_loader import (
+from weather_adjusted_generation_analytics.config import config
+from weather_adjusted_generation_analytics.loaders.generation_loader import (
     load_generation_parquet,
     run_generation_ingestion,
 )
-from src.loaders.weather_loader import (
+from weather_adjusted_generation_analytics.loaders.weather_loader import (
     load_weather_parquet,
     run_weather_ingestion,
 )
-from src.utils import get_logger
+from weather_adjusted_generation_analytics.utils import get_logger
 
 logger = get_logger(__name__)
 
@@ -39,16 +39,6 @@ def run_full_ingestion(
     -------
     None
 
-    Examples
-    --------
-    >>> # Ingest all available data
-    >>> run_full_ingestion()
-    >>>
-    >>> # Ingest specific files
-    >>> weather_files = [Path("data/raw/weather/weather_2023-01-01.parquet")]
-    >>> generation_files = [Path("data/raw/generation/generation_2023-01-01.parquet")]
-    >>> run_full_ingestion(weather_files, generation_files)
-
     """
     logger.info("Starting full renewable energy data ingestion")
 
@@ -72,8 +62,8 @@ def run_full_ingestion(
         logger.info("FULL INGESTION COMPLETED SUCCESSFULLY")
         logger.info("=" * 60)
 
-    except Exception as e:
-        logger.error(f"Full ingestion failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Full ingestion failed: {exc}", exc_info=True)
         raise
 
 
@@ -135,12 +125,14 @@ def run_combined_pipeline(
             logger.error("Combined ingestion had failures")
             for package in load_info.load_packages:
                 for job in package.jobs["failed_jobs"]:
-                    logger.error(f"Failed job: {job.job_file_path} - {job.failed_message}")
+                    logger.error(
+                        f"Failed job: {job.job_file_path} - {job.failed_message}"
+                    )
         else:
             logger.info("All data loaded successfully")
 
-    except Exception as e:
-        logger.error(f"Combined ingestion failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Combined ingestion failed: {exc}", exc_info=True)
         raise
 
 
@@ -185,10 +177,13 @@ def verify_ingestion() -> None:
 
             print(f"\nSample from {table_name}:")
             if sample:
-                # Print column names
-                columns = [desc[1] for desc in con.execute(f"PRAGMA table_info({config.dlt_schema}.{table_name})").fetchall()]
+                columns = [
+                    desc[1]
+                    for desc in con.execute(
+                        f"PRAGMA table_info({config.dlt_schema}.{table_name})"
+                    ).fetchall()
+                ]
                 print(f"Columns: {', '.join(columns)}")
-                # Print sample rows
                 for row in sample:
                     print(row)
             else:
@@ -197,32 +192,14 @@ def verify_ingestion() -> None:
         con.close()
         logger.info("Verification completed")
 
-    except Exception as e:
-        logger.error(f"Verification failed: {e}", exc_info=True)
+    except Exception as exc:
+        logger.error(f"Verification failed: {exc}", exc_info=True)
         raise
 
 
-def main() -> None:
-    """
-    Main entry point for dlt pipeline execution.
+__all__ = [
+    "run_combined_pipeline",
+    "run_full_ingestion",
+    "verify_ingestion",
+]
 
-    Runs full ingestion and verification.
-
-    Returns
-    -------
-    None
-
-    """
-    logger.info("Starting dlt pipeline main execution")
-
-    # Run full ingestion
-    run_full_ingestion()
-
-    # Verify results
-    verify_ingestion()
-
-    logger.info("dlt pipeline execution completed successfully")
-
-
-if __name__ == "__main__":
-    main()

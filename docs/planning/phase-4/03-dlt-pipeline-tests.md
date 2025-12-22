@@ -1,7 +1,7 @@
 # Phase 4.3 — `dlt_pipeline.py` Tests
 
 ## Objective
-Validate orchestration logic and dlt pipeline wiring in `src/loaders/dlt_pipeline.py` without performing real ingestion.
+Validate orchestration logic and dlt pipeline wiring in `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py` without performing real ingestion.
 
 ## Where tests should live
 - `tests/unit/test_dlt_pipeline.py`

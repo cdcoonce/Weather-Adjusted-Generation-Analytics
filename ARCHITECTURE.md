@@ -28,7 +28,7 @@ This repository implements a small, production-style analytics engineering pipel
 ### Business logic
 
 - Business logic SHOULD be deterministic and testable.
-- Core Python logic lives under `src/`.
+- Core Python logic lives under `weather_adjusted_generation_analytics/`.
 - dbt SQL logic lives under `dbt/renewable_dbt/`.
 
 ### Storage
@@ -40,15 +40,15 @@ This repository implements a small, production-style analytics engineering pipel
 
 1. **Generate mock data**
    - Scripts:
-     - `src/mock_data/generate_weather.py`
-     - `src/mock_data/generate_generation.py`
+  - `weather_adjusted_generation_analytics/mock_data/generate_weather.py`
+  - `weather_adjusted_generation_analytics/mock_data/generate_generation.py`
    - Output (default):
      - `data/raw/weather/weather_YYYY-MM-DD.parquet`
      - `data/raw/generation/generation_YYYY-MM-DD.parquet`
 
 2. **Ingest into DuckDB via dlt**
    - Entrypoint:
-     - `src/loaders/dlt_pipeline.py`
+  - `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`
    - Key behaviors:
      - Incremental load semantics are managed by dlt.
      - Composite primary key is typically `(asset_id, timestamp)`.

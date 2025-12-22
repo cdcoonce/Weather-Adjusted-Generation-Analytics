@@ -1,4 +1,4 @@
-"""Unit tests for `src.utils.polars_utils`.
+"""Unit tests for `weather_adjusted_generation_analytics.utils.polars_utils`.
 
 These tests focus on deterministic transforms and edge cases.
 
@@ -11,7 +11,7 @@ from datetime import datetime
 import polars as pl
 import pytest
 
-from src.utils.polars_utils import (
+from weather_adjusted_generation_analytics.utils.polars_utils import (
     add_lag_features,
     add_lead_features,
     add_rolling_stats,

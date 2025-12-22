@@ -5,17 +5,17 @@ Define what qualifies as “unit tests” for this repo and what we consider suf
 
 ## In scope
 
-### `src/utils/polars_utils.py`
+### `weather_adjusted_generation_analytics/utils/polars_utils.py`
 - Transform correctness (columns created, values expected for small deterministic inputs)
 - Edge cases (empty inputs where reasonable, partitioning behavior, invalid stats)
 - Non-mutation expectations (functions should not unexpectedly mutate inputs)
 
-### `src/utils/logging_utils.py`
+### `weather_adjusted_generation_analytics/utils/logging_utils.py`
 - `JSONFormatter.format()` emits expected keys and merges `extra_fields`
 - `get_logger()` returns a logger with expected handler/formatter settings
 - `log_execution_time()` logs success/failure paths deterministically using `caplog`
 
-### `src/config/settings.py`
+### `weather_adjusted_generation_analytics/config/settings.py`
 - Defaults and types
 - Derived paths (`weather_raw_path`, `generation_raw_path`)
 - `ensure_directories()` creates expected directories

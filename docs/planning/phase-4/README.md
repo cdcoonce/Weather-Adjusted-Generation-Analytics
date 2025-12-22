@@ -1,14 +1,14 @@
 # Phase 4 — Loader Unit Tests (I/O Heavy) Roadmap
 
-Phase 4 focuses on tests for `src/loaders/` modules that interact with filesystems and dlt pipeline objects.
+Phase 4 focuses on tests for `weather_adjusted_generation_analytics/loaders/` modules that interact with filesystems and dlt pipeline objects.
 
 ## Goal
 Add unit tests that validate loader behavior **without** running full ingestion into DuckDB.
 
 Target modules:
-- `src/loaders/weather_loader.py`
-- `src/loaders/generation_loader.py`
-- `src/loaders/dlt_pipeline.py`
+- `weather_adjusted_generation_analytics/loaders/weather_loader.py`
+- `weather_adjusted_generation_analytics/loaders/generation_loader.py`
+- `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`
 
 ## Constraints
 - Do not run real `dlt.pipeline(...).run(...)` in unit tests.

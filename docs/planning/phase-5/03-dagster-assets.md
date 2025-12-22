@@ -26,7 +26,7 @@ Validate that key Dagster assets can be materialized **in-process** (no UI) agai
   - Or `defs.get_implicit_global_asset_job_def()` / `define_asset_job` and run with Dagster instance.
 
 ## Isolation & patching guidance
-- Many Dagster modules mutate `sys.path` to import `src/`. Keep tests explicit about imports.
+- Dagster code should not mutate `sys.path` for imports; rely on the installed package import path.
 - Assets import `src.config.config` (global). For deterministic tests:
   - patch module-level references (e.g., `dags.dagster_project.assets.config`) to a temp `Config` or a lightweight fake.
 

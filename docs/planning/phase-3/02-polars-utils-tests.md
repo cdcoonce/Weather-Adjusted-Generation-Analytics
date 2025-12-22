@@ -1,7 +1,7 @@
 # Phase 3.2 — `polars_utils` Unit Tests
 
 ## Objective
-Add a comprehensive set of deterministic unit tests for `src/utils/polars_utils.py`.
+Add a comprehensive set of deterministic unit tests for `weather_adjusted_generation_analytics/utils/polars_utils.py`.
 
 ## Where tests should live
 - `tests/unit/test_polars_utils.py`

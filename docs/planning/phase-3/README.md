@@ -4,9 +4,9 @@ Phase 3 uses the Phase 1 test scaffolding and Phase 2 fixtures to write **unit t
 
 ## Goal
 Add a meaningful unit-test baseline for:
-- `src/utils/polars_utils.py`
-- `src/utils/logging_utils.py`
-- `src/config/settings.py`
+- `weather_adjusted_generation_analytics/utils/polars_utils.py`
+- `weather_adjusted_generation_analytics/utils/logging_utils.py`
+- `weather_adjusted_generation_analytics/config/settings.py`
 
 ## What Phase 3 should produce
 - New unit test modules under `tests/unit/`:
@@ -28,5 +28,5 @@ Add a meaningful unit-test baseline for:
 
 ## Definition of done
 - `uv run pytest -m unit` passes consistently.
-- Phase 3 adds coverage to `src/utils/*` and `src/config/*`.
+- Phase 3 adds coverage to `weather_adjusted_generation_analytics/utils/*` and `weather_adjusted_generation_analytics/config/*`.
 - New tests are stable across platforms and do not require `.env`.

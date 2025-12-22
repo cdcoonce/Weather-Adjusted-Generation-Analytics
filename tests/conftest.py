@@ -13,7 +13,7 @@ import duckdb
 import pytest
 import polars as pl
 
-from src.config.settings import Config
+from weather_adjusted_generation_analytics.config.settings import Config
 
 from tests.fixtures.duckdb_fixtures import DuckDBDatasetSpec, load_weather_and_generation
 from tests.fixtures.parquet_builders import read_parquet, write_parquet

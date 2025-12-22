@@ -1,16 +1,10 @@
 """Dagster assets for renewable energy data pipeline."""
 
-import sys
-from pathlib import Path
-
 from dagster import AssetExecutionContext, asset
 
-# Add src to path for imports
-sys.path.insert(0, str(Path(__file__).parent.parent.parent / "src"))
-
-from src.config import config
-from src.loaders import run_generation_ingestion, run_weather_ingestion
-from src.utils import get_logger
+from weather_adjusted_generation_analytics.config import config
+from weather_adjusted_generation_analytics.loaders import run_generation_ingestion, run_weather_ingestion
+from weather_adjusted_generation_analytics.utils import get_logger
 
 logger = get_logger(__name__)
 

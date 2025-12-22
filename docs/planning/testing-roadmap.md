@@ -57,6 +57,6 @@ pytest -q --cov=src --cov-report=term-missing
 ## Next steps (developer checklist)
 - Add `requirements-dev.txt` or update `pyproject.toml` with dev-deps.
 - Create `tests/conftest.py` with core fixtures listed above.
-- Implement initial unit tests for `src/utils` and `src/config`.
+- Implement initial unit tests for `weather_adjusted_generation_analytics/utils` and `weather_adjusted_generation_analytics/config`.
 - Create a lightweight GitHub Actions workflow to run tests and publish coverage.
 

@@ -24,22 +24,22 @@ This document outlines a phased approach to introduce a robust pytest test suite
 These are good early candidates because they’re deterministic and don’t require standing up Dagster/dbt.
 
 1. **Pure / mostly-pure utilities**
-  - `src/utils/polars_utils.py`: deterministic transforms (lags/leads/rolling stats/time features).
+  - `weather_adjusted_generation_analytics/utils/polars_utils.py`: deterministic transforms (lags/leads/rolling stats/time features).
 
 2. **Configuration behavior**
-  - `src/config/settings.py`: default values, derived paths, and `ensure_directories()` behavior.
+  - `weather_adjusted_generation_analytics/config/settings.py`: default values, derived paths, and `ensure_directories()` behavior.
 
 3. **Logging**
-  - `src/utils/logging_utils.py`: JSON formatting structure and logger handler setup.
+  - `weather_adjusted_generation_analytics/utils/logging_utils.py`: JSON formatting structure and logger handler setup.
 
 4. **Loader boundaries (unit level)**
-  - `src/loaders/weather_loader.py`, `src/loaders/generation_loader.py`: the resource generators should yield dict records for provided parquet files.
-  - `src/loaders/dlt_pipeline.py`: orchestration functions can be smoke-tested via mocking (avoid actually running dlt in unit tests).
+  - `weather_adjusted_generation_analytics/loaders/weather_loader.py`, `weather_adjusted_generation_analytics/loaders/generation_loader.py`: the resource generators should yield dict records for provided parquet files.
+  - `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`: orchestration functions can be smoke-tested via mocking (avoid actually running dlt in unit tests).
 
 ### High-risk / special-handling areas
-- **Global config import side effects**: `src/config/settings.py` instantiates `config = Config()` at import time. Tests should avoid relying on a real `.env` and should use `monkeypatch` to control environment variables when needed.
+- **Global config import side effects**: `weather_adjusted_generation_analytics/config/settings.py` instantiates `config = Config()` at import time. Tests should avoid relying on a real `.env` and should use `monkeypatch` to control environment variables when needed.
 - **Filesystem paths are relative by default**: config defaults like `data/raw` assume repo-root working directory. Tests should prefer `tmp_path` and inject paths via env vars or by constructing `Config()` explicitly.
-- **Dagster modules mutate `sys.path`**: Dagster packages in `dags/dagster_project/*` insert `src` into `sys.path` for imports. Keep unit tests focused on `src/` and reserve Dagster tests for integration phase.
+- **Dagster import boundaries**: keep unit tests focused on `weather_adjusted_generation_analytics/` and reserve Dagster tests for integration phase.
 - **dlt decorators**: `@dlt.resource` wraps generator functions. Unit tests should focus on the yielded records for a small parquet file and avoid running full pipelines until integration testing.
 - **DuckDB integration**: correlation asset and verify_ingestion connect to a DuckDB file on disk; tests should use in-memory DuckDB or a temp database path.
 
@@ -76,8 +76,8 @@ Implementation roadmap: see the Phase 2 playbook in `docs/planning/phase-2/`.
 ## Phase 3 — Unit tests (core modules)
 - Goal: Validate pure logic and small units.
 - Deliverables:
-  - Unit tests for `src/utils/*` and `src/config/*`.
-  - Tests for small helpers in `src/loaders` that can be run with mocks.
+  - Unit tests for `weather_adjusted_generation_analytics/utils/*` and `weather_adjusted_generation_analytics/config/*`.
+  - Tests for small helpers in `weather_adjusted_generation_analytics/loaders` that can be run with mocks.
 - Approach:
   - Use parametrized tests for edge cases.
   - Use `pytest-mock` or `monkeypatch` for environment variables and I/O.

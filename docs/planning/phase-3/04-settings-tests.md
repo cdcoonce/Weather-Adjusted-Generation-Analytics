@@ -1,7 +1,7 @@
 # Phase 3.4 — `settings` Unit Tests
 
 ## Objective
-Validate `src/config/settings.py` without relying on a real `.env`.
+Validate `weather_adjusted_generation_analytics/config/settings.py` without relying on a real `.env`.
 
 ## Where tests should live
 - `tests/unit/test_settings.py`

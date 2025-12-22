@@ -10,7 +10,10 @@ from __future__ import annotations
 import numpy as np
 import pytest
 
-from src.mock_data.generate_generation import solar_power_output, wind_power_curve
+from weather_adjusted_generation_analytics.mock_data.generate_generation import (
+    solar_power_output,
+    wind_power_curve,
+)
 
 
 @pytest.mark.unit

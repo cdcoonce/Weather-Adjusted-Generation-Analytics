@@ -178,8 +178,8 @@ Normalized score (0-100) comparing actual vs. expected generation.
 ### **1. Generate Mock Data**
 
 ```bash
-uv run python src/mock_data/generate_weather.py
-uv run python src/mock_data/generate_generation.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_weather.py
+uv run python weather_adjusted_generation_analytics/mock_data/generate_generation.py
 ```
 
 This creates 2 years of hourly data for 10 assets as Parquet files.
@@ -187,7 +187,7 @@ This creates 2 years of hourly data for 10 assets as Parquet files.
 ### **2. Run dlt Ingestion**
 
 ```bash
-uv run python src/loaders/dlt_pipeline.py
+uv run python weather_adjusted_generation_analytics/loaders/dlt_pipeline.py
 ```
 
 Loads Parquet data incrementally into DuckDB.
@@ -258,12 +258,12 @@ renewable_performance_pipeline/
 │       ├── tests/                  # Data quality tests
 │       └── profiles/               # Connection profiles
 │
-├── src/                            # Python source code
-│   ├── config/                     # Configuration management
-│   ├── mock_data/                  # Data generators
-│   ├── loaders/                    # dlt pipelines
-│   ├── pipelines/                  # Processing logic
-│   └── utils/                      # Shared utilities
+├── weather_adjusted_generation_analytics/  # Python source code
+│   ├── config/                           # Configuration management
+│   ├── mock_data/                        # Data generators
+│   ├── loaders/                          # dlt pipelines
+│   ├── pipelines/                        # Processing logic
+│   └── utils/                            # Shared utilities
 │
 └── notebooks/                      # Jupyter analysis
     ├── eda_weather.ipynb
@@ -289,7 +289,7 @@ Run quality checks:
 
 ```bash
 uv run ruff check .
-uv run mypy src/
+uv run mypy weather_adjusted_generation_analytics/
 uv run pytest
 ```
 

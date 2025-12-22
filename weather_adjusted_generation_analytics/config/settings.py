@@ -187,3 +187,7 @@ class Config(BaseSettings):
 
 # Global configuration instance
 config = Config()
+
+
+__all__ = ["Config", "config"]
+

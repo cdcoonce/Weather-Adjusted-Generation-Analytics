@@ -1,4 +1,4 @@
-"""Unit tests for `src.config.settings`."""
+"""Unit tests for `weather_adjusted_generation_analytics.config.settings`."""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from pathlib import Path
 import pytest
 from pydantic import ValidationError
 
-from src.config.settings import Config
+from weather_adjusted_generation_analytics.config.settings import Config
 
 
 @pytest.mark.unit
