@@ -1,0 +1,136 @@
+version: 2
+
+sources:
+  - name: renewable_raw
+    description: "Raw renewable energy data ingested via dlt"
+    schema: renewable_energy
+    
+    tables:
+      - name: weather
+        description: "Hourly weather observations for renewable energy assets"
+        columns:
+          - name: timestamp
+            description: "Observation timestamp (UTC)"
+            tests:
+              - not_null
+          
+          - name: asset_id
+            description: "Unique asset identifier"
+            tests:
+              - not_null
+              - relationships:
+                  to: source('renewable_raw', 'generation')
+                  field: asset_id
+          
+          - name: wind_speed_mps
+            description: "Wind speed in meters per second"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 50
+          
+          - name: wind_direction_deg
+            description: "Wind direction in degrees (0-360)"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 360
+          
+          - name: ghi
+            description: "Global Horizontal Irradiance in W/m²"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 1500
+          
+          - name: temperature_c
+            description: "Ambient temperature in Celsius"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: -50
+                  max_value: 60
+          
+          - name: pressure_hpa
+            description: "Atmospheric pressure in hectopascals"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 900
+                  max_value: 1100
+          
+          - name: relative_humidity
+            description: "Relative humidity percentage"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 100
+        
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              combination_of_columns:
+                - asset_id
+                - timestamp
+      
+      - name: generation
+        description: "Hourly generation data for renewable energy assets"
+        columns:
+          - name: timestamp
+            description: "Generation timestamp (UTC)"
+            tests:
+              - not_null
+          
+          - name: asset_id
+            description: "Unique asset identifier"
+            tests:
+              - not_null
+          
+          - name: gross_generation_mwh
+            description: "Gross generation in MWh (before losses)"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  inclusive: true
+          
+          - name: net_generation_mwh
+            description: "Net generation in MWh (after losses)"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  inclusive: true
+          
+          - name: curtailment_mwh
+            description: "Curtailed energy in MWh"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  inclusive: true
+          
+          - name: availability_pct
+            description: "Asset availability percentage"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 100
+          
+          - name: asset_capacity_mw
+            description: "Asset nameplate capacity in MW"
+            tests:
+              - not_null
+              - dbt_utils.accepted_range:
+                  min_value: 0
+                  max_value: 1000
+        
+        tests:
+          - dbt_utils.unique_combination_of_columns:
+              combination_of_columns:
+                - asset_id
+                - timestamp

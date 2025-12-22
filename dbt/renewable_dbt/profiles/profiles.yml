@@ -1,0 +1,20 @@
+renewable_dbt:
+  target: dev
+  outputs:
+    dev:
+      type: duckdb
+      path: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/data/warehouse.duckdb
+      schema: renewable_energy
+      threads: 4
+      extensions:
+        - parquet
+        - httpfs
+    
+    prod:
+      type: duckdb
+      path: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/data/warehouse_prod.duckdb
+      schema: renewable_energy
+      threads: 8
+      extensions:
+        - parquet
+        - httpfs

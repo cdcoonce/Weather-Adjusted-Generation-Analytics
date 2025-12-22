@@ -1,0 +1,89 @@
+version: 2
+
+models:
+  - name: mart_asset_performance_daily
+    description: "Daily asset performance mart with generation, availability, and weather metrics"
+    columns:
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+      
+      - name: date
+        description: "Date of performance"
+        tests:
+          - not_null
+      
+      - name: daily_capacity_factor
+        description: "Daily capacity factor"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1.1
+      
+      - name: total_net_generation_mwh
+        description: "Total daily net generation"
+        tests:
+          - not_null
+      
+      - name: avg_availability_pct
+        description: "Average daily availability"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - date
+  
+  - name: mart_asset_weather_performance
+    description: "Weather-adjusted performance mart with correlations and performance scores"
+    columns:
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+      
+      - name: date
+        description: "Date of performance"
+        tests:
+          - not_null
+      
+      - name: wind_generation_correlation
+        description: "Correlation between wind speed and generation"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 1
+      
+      - name: solar_generation_correlation
+        description: "Correlation between GHI and generation"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: -1
+              max_value: 1
+      
+      - name: performance_score
+        description: "Weather-adjusted performance score (0-100)"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+      
+      - name: inferred_asset_type
+        description: "Inferred asset type based on weather correlations"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['wind', 'solar']
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - date

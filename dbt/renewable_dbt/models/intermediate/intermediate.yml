@@ -1,0 +1,86 @@
+version: 2
+
+models:
+  - name: int_weather_daily
+    description: "Daily aggregated weather metrics by asset"
+    columns:
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+      
+      - name: date
+        description: "Date of aggregation"
+        tests:
+          - not_null
+      
+      - name: avg_wind_speed_mps
+        description: "Average daily wind speed"
+      
+      - name: avg_ghi
+        description: "Average daily global horizontal irradiance"
+      
+      - name: data_completeness_pct
+        description: "Percentage of complete observations"
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - date
+  
+  - name: int_generation_daily
+    description: "Daily aggregated generation metrics by asset"
+    columns:
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+      
+      - name: date
+        description: "Date of aggregation"
+        tests:
+          - not_null
+      
+      - name: daily_capacity_factor
+        description: "Daily capacity factor"
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1.1
+              inclusive: true
+      
+      - name: total_net_generation_mwh
+        description: "Total daily net generation"
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - date
+  
+  - name: int_asset_weather_join
+    description: "Hourly joined weather and generation data"
+    columns:
+      - name: timestamp
+        description: "Observation timestamp"
+        tests:
+          - not_null
+      
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+      
+      - name: is_complete_record
+        description: "Flag indicating both weather and generation data are valid"
+        tests:
+          - not_null
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - timestamp

@@ -1,0 +1,82 @@
+name: 'renewable_dbt'
+version: '1.0.0'
+config-version: 2
+
+# Project profile configuration
+profile: 'renewable_dbt'
+
+# Directory configurations
+model-paths: ["models"]
+analysis-paths: ["analyses"]
+test-paths: ["tests"]
+seed-paths: ["seeds"]
+macro-paths: ["macros"]
+snapshot-paths: ["snapshots"]
+
+# Output directory for compiled SQL
+target-path: "target"
+clean-targets:
+  - "target"
+  - "dbt_packages"
+
+# Model configurations
+models:
+  renewable_dbt:
+    +materialized: view
+    +on_schema_change: "fail"
+    
+    # Staging models - ephemeral or views for source transformations
+    staging:
+      +materialized: view
+      +schema: staging
+      +docs:
+        node_color: "#8BC34A"
+    
+    # Intermediate models - views for business logic
+    intermediate:
+      +materialized: view
+      +schema: intermediate
+      +docs:
+        node_color: "#FF9800"
+    
+    # Mart models - tables for analytics consumption
+    marts:
+      +materialized: table
+      +schema: marts
+      +docs:
+        node_color: "#2196F3"
+
+# Seed configurations
+seeds:
+  renewable_dbt:
+    +schema: seeds
+    +quote_columns: false
+
+# Test configurations
+tests:
+  renewable_dbt:
+    +store_failures: true
+    +schema: test_failures
+
+# Variable definitions
+vars:
+  # Date boundaries for incremental models
+  start_date: '2023-01-01'
+  end_date: '2024-12-31'
+  
+  # Performance thresholds
+  min_availability_pct: 85.0
+  min_capacity_factor: 0.05
+  
+  # Window sizes for rolling calculations
+  short_window_hours: 24
+  medium_window_hours: 168  # 7 days
+  long_window_hours: 720    # 30 days
+
+# Documentation
+docs-paths: ["docs"]
+
+# Dispatch configuration for cross-database compatibility
+dispatch:
+  - macro_namespace: dbt_utils
+    search_order: ['renewable_dbt', 'dbt_utils']

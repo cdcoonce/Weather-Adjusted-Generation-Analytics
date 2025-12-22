@@ -1,0 +1,64 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv/
+pip-log.txt
+pip-delete-this-directory.txt
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+*.egg-info/
+dist/
+build/
+
+# Environment
+.env
+.env.local
+
+# Dagster
+dagster_home/
+.dagster/
+logs/
+storage/
+history/
+
+# dbt
+dbt/renewable_dbt/target/
+dbt/renewable_dbt/dbt_packages/
+dbt/renewable_dbt/logs/
+dbt/renewable_dbt/profiles/.user.yml
+
+# DuckDB
+*.duckdb
+*.duckdb.wal
+
+# Data files (keep structure, ignore contents)
+data/raw/weather/*.parquet
+data/raw/generation/*.parquet
+data/intermediate/**/*.parquet
+data/processed/**/*.parquet
+data/**/*.csv
+
+# Jupyter
+.ipynb_checkpoints/
+*.ipynb_checkpoints
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# dlt
+.dlt/

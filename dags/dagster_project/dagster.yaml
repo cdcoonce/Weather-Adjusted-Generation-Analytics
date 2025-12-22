@@ -1,0 +1,20 @@
+telemetry:
+  enabled: false
+
+storage:
+  sqlite:
+    base_dir: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/dags/dagster_project/storage
+
+run_launcher:
+  module: dagster.core.launcher
+  class: DefaultRunLauncher
+
+run_coordinator:
+  module: dagster.core.run_coordinator
+  class: DefaultRunCoordinator
+
+compute_logs:
+  module: dagster.core.storage.local_compute_log_manager
+  class: LocalComputeLogManager
+  config:
+    base_dir: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/dags/dagster_project/logs
