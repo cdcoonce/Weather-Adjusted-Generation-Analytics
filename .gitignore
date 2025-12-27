@@ -14,11 +14,15 @@ pip-delete-this-directory.txt
 .mypy_cache/
 .ruff_cache/
 .coverage
+.coverage*
 coverage.xml
 htmlcov/
 *.egg-info/
 dist/
 build/
+
+# Legacy (repo uses `weather_adjusted_generation_analytics/` as the canonical package)
+src/
 
 # Environment
 .env
