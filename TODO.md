@@ -14,7 +14,7 @@ This file tracks the repo’s current work.
   - [ ] Add caching for uv/pip and dbt packages.
 
 - [ ] Increase unit coverage for `weather_adjusted_generation_analytics/mock_data/`:
-  - [ ] Add tests for `generate_weather_data()` output shape and value bounds.
+  - [x] Add tests for `generate_weather_data()` output shape and value bounds.
   - [ ] Add tests for `generate_generation_data()` determinism on a small date range.
 
 - [ ] Remove Ruff deprecation warnings:
