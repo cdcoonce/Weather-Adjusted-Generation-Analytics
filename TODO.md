@@ -10,18 +10,25 @@ This file tracks the repo’s current work.
 
 ## Now
 
-- [ ] Add focused unit tests for `weather_adjusted_generation_analytics/mock_data/`:
-  - [x] `wind_power_curve()` edge points (cut-in/rated/cut-out).
-  - [x] `solar_power_output()` scaling + clipping.
-
-- [ ] Increase coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
-  - [ ] Unit-test `run_full_ingestion()` call order via mocking.
-  - [ ] Unit-test `run_combined_pipeline()` success and failure cases.
-
 - [ ] CI improvements:
   - [ ] Add caching for uv/pip and dbt packages.
 
+- [ ] Increase unit coverage for `weather_adjusted_generation_analytics/mock_data/`:
+  - [x] Add tests for `generate_weather_data()` output shape and value bounds.
+  - [ ] Add tests for `generate_generation_data()` determinism on a small date range.
+
+- [ ] Remove Ruff deprecation warnings:
+  - [ ] Migrate Ruff config in `pyproject.toml` to `tool.ruff.lint`.
+
 ## Done (recent)
+
+- [x] Add focused unit tests for `weather_adjusted_generation_analytics/mock_data/`:
+  - [x] `wind_power_curve()` edge points (cut-in/rated/cut-out).
+  - [x] `solar_power_output()` scaling + clipping.
+
+- [x] Increase unit test coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
+  - [x] Unit-test `run_full_ingestion()` call order via mocking.
+  - [x] Unit-test `run_combined_pipeline()` success and failure cases.
 
 - [x] Decide and document the Python version policy (see `DECISIONS.md` D-0004).
 - [x] Add `ARCHITECTURE.md` describing:
@@ -40,10 +47,6 @@ This file tracks the repo’s current work.
 
 ## Next
 
-- [ ] Increase unit coverage for `weather_adjusted_generation_analytics/mock_data/`:
-  - [ ] Add tests for `generate_weather_data()` output shape and value bounds.
-  - [ ] Add tests for `generate_generation_data()` determinism on a small date range.
-
 - [ ] Increase coverage for `weather_adjusted_generation_analytics/loaders/dlt_pipeline.py`:
   - [ ] Decide whether `verify_ingestion()` should be schema-agnostic (likely yes).
 
@@ -51,7 +54,6 @@ This file tracks the repo’s current work.
   - [ ] (Optional) Add a Python version matrix if we want earlier signal on 3.13.
   - [ ] Consider splitting unit vs integration into parallel jobs (already separated).
   - [ ] Enable branch protection requiring CI checks (GitHub settings).
-  - [ ] Migrate Ruff config in `pyproject.toml` to `tool.ruff.lint` to remove deprecation warnings.
 
 ## Later
 

@@ -6,6 +6,7 @@ These tests mock dlt and ingestion functions to avoid side effects.
 
 from __future__ import annotations
 
+import logging
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import call
@@ -123,3 +124,140 @@ def test_run_combined_pipeline_builds_pipeline_and_runs_resources(
         [weather_resource_sentinel, generation_resource_sentinel],
         loader_file_format="jsonl",
     )
+
+
+@pytest.mark.unit
+def test_run_combined_pipeline_logs_success_when_no_failed_jobs(
+    monkeypatch: pytest.MonkeyPatch,
+    mocker,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    duckdb_path = tmp_path / "warehouse.duckdb"
+
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_pipeline_name", "test_pipeline")
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_schema", "test_schema")
+    monkeypatch.setattr(dlt_pipeline.config, "duckdb_path", duckdb_path)
+
+    destination_sentinel = object()
+    monkeypatch.setattr(
+        dlt_pipeline.dlt.destinations,
+        "duckdb",
+        mocker.Mock(return_value=destination_sentinel),
+    )
+
+    load_info = SimpleNamespace(has_failed_jobs=False, load_packages=[])
+    pipeline_instance = mocker.Mock()
+    pipeline_instance.pipeline_name = "test_pipeline"
+    pipeline_instance.run = mocker.Mock(return_value=load_info)
+    monkeypatch.setattr(
+        dlt_pipeline.dlt,
+        "pipeline",
+        mocker.Mock(return_value=pipeline_instance),
+    )
+
+    monkeypatch.setattr(dlt_pipeline, "load_weather_parquet", mocker.Mock())
+    monkeypatch.setattr(dlt_pipeline, "load_generation_parquet", mocker.Mock())
+
+    with caplog.at_level(logging.INFO):
+        dlt_pipeline.run_combined_pipeline(
+            weather_files=[Path("weather.parquet")],
+            generation_files=[Path("generation.parquet")],
+        )
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("All data loaded successfully" in msg for msg in messages)
+
+
+@pytest.mark.unit
+def test_run_combined_pipeline_logs_failed_jobs_when_present(
+    monkeypatch: pytest.MonkeyPatch,
+    mocker,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    duckdb_path = tmp_path / "warehouse.duckdb"
+
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_pipeline_name", "test_pipeline")
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_schema", "test_schema")
+    monkeypatch.setattr(dlt_pipeline.config, "duckdb_path", duckdb_path)
+
+    destination_sentinel = object()
+    monkeypatch.setattr(
+        dlt_pipeline.dlt.destinations,
+        "duckdb",
+        mocker.Mock(return_value=destination_sentinel),
+    )
+
+    failed_job_1 = SimpleNamespace(job_file_path="a.jsonl", failed_message="bad A")
+    failed_job_2 = SimpleNamespace(job_file_path="b.jsonl", failed_message="bad B")
+    load_packages = [
+        SimpleNamespace(jobs={"failed_jobs": [failed_job_1, failed_job_2]})
+    ]
+    load_info = SimpleNamespace(has_failed_jobs=True, load_packages=load_packages)
+
+    pipeline_instance = mocker.Mock()
+    pipeline_instance.pipeline_name = "test_pipeline"
+    pipeline_instance.run = mocker.Mock(return_value=load_info)
+    monkeypatch.setattr(
+        dlt_pipeline.dlt,
+        "pipeline",
+        mocker.Mock(return_value=pipeline_instance),
+    )
+
+    monkeypatch.setattr(dlt_pipeline, "load_weather_parquet", mocker.Mock())
+    monkeypatch.setattr(dlt_pipeline, "load_generation_parquet", mocker.Mock())
+
+    with caplog.at_level(logging.ERROR):
+        dlt_pipeline.run_combined_pipeline(
+            weather_files=[Path("weather.parquet")],
+            generation_files=[Path("generation.parquet")],
+        )
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("Combined ingestion had failures" in msg for msg in messages)
+    assert any("Failed job: a.jsonl - bad A" in msg for msg in messages)
+    assert any("Failed job: b.jsonl - bad B" in msg for msg in messages)
+
+
+@pytest.mark.unit
+def test_run_combined_pipeline_reraises_and_logs_on_exception(
+    monkeypatch: pytest.MonkeyPatch,
+    mocker,
+    tmp_path: Path,
+    caplog: pytest.LogCaptureFixture,
+) -> None:
+    duckdb_path = tmp_path / "warehouse.duckdb"
+
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_pipeline_name", "test_pipeline")
+    monkeypatch.setattr(dlt_pipeline.config, "dlt_schema", "test_schema")
+    monkeypatch.setattr(dlt_pipeline.config, "duckdb_path", duckdb_path)
+
+    destination_sentinel = object()
+    monkeypatch.setattr(
+        dlt_pipeline.dlt.destinations,
+        "duckdb",
+        mocker.Mock(return_value=destination_sentinel),
+    )
+
+    pipeline_instance = mocker.Mock()
+    pipeline_instance.pipeline_name = "test_pipeline"
+    pipeline_instance.run = mocker.Mock(side_effect=RuntimeError("boom"))
+    monkeypatch.setattr(
+        dlt_pipeline.dlt,
+        "pipeline",
+        mocker.Mock(return_value=pipeline_instance),
+    )
+
+    monkeypatch.setattr(dlt_pipeline, "load_weather_parquet", mocker.Mock())
+    monkeypatch.setattr(dlt_pipeline, "load_generation_parquet", mocker.Mock())
+
+    with caplog.at_level(logging.ERROR):
+        with pytest.raises(RuntimeError, match="boom"):
+            dlt_pipeline.run_combined_pipeline(
+                weather_files=[Path("weather.parquet")],
+                generation_files=[Path("generation.parquet")],
+            )
+
+    messages = [rec.getMessage() for rec in caplog.records]
+    assert any("Combined ingestion failed:" in msg for msg in messages)
