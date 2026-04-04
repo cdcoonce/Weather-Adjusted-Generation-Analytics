@@ -21,8 +21,8 @@ htmlcov/
 dist/
 build/
 
-# Legacy (repo uses `weather_adjusted_generation_analytics/` as the canonical package)
-src/
+# Legacy package (kept during migration, new code lives in src/weather_analytics/)
+# src/  -- removed: src/ is now used for the new weather_analytics package
 
 # Environment
 .env

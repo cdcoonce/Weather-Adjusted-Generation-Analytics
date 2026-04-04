@@ -1,0 +1,36 @@
+version: 2
+
+models:
+  - name: stg_weather
+    description: "Staging model for weather data with time features and data quality flags"
+    columns:
+      - name: timestamp
+        description: "Observation timestamp"
+        tests:
+          - not_null
+
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+
+      - name: wind_speed_mps
+        description: "Wind speed in meters per second"
+        tests:
+          - not_null
+
+      - name: ghi
+        description: "Global Horizontal Irradiance in W/m²"
+        tests:
+          - not_null
+
+      - name: is_data_complete
+        description: "Flag indicating all required weather fields are present"
+        tests:
+          - not_null
+
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - asset_id
+            - timestamp

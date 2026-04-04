@@ -3,85 +3,326 @@ version: 2
 models:
   - name: mart_asset_performance_daily
     description: "Daily asset performance mart with generation, availability, and weather metrics"
+    config:
+      contract:
+        enforced: true
     columns:
       - name: asset_id
+        data_type: varchar
         description: "Unique asset identifier"
+        constraints:
+          - type: not_null
         tests:
           - not_null
-      
+
       - name: date
+        data_type: timestamp_ntz
         description: "Date of performance"
+        constraints:
+          - type: not_null
         tests:
           - not_null
-      
+
+      - name: asset_capacity_mw
+        data_type: float
+        description: "Asset nameplate capacity in MW"
+
+      - name: asset_size_category
+        data_type: varchar
+        description: "Asset size classification (Small/Medium/Large)"
+
+      - name: total_gross_generation_mwh
+        data_type: float
+        description: "Total daily gross generation"
+
+      - name: total_net_generation_mwh
+        data_type: float
+        description: "Total daily net generation"
+        constraints:
+          - type: not_null
+        tests:
+          - not_null
+
+      - name: total_curtailment_mwh
+        data_type: float
+        description: "Total daily curtailment"
+
+      - name: avg_hourly_net_mwh
+        data_type: float
+        description: "Average hourly net generation"
+
+      - name: peak_hourly_net_mwh
+        data_type: float
+        description: "Peak hourly net generation"
+
       - name: daily_capacity_factor
+        data_type: float
         description: "Daily capacity factor"
+        constraints:
+          - type: not_null
         tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 1.1
-      
-      - name: total_net_generation_mwh
-        description: "Total daily net generation"
-        tests:
-          - not_null
-      
+
+      - name: avg_hourly_capacity_factor
+        data_type: float
+        description: "Average hourly capacity factor"
+
       - name: avg_availability_pct
+        data_type: float
         description: "Average daily availability"
         tests:
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
-    
+
+      - name: min_availability_pct
+        data_type: float
+        description: "Minimum hourly availability for the day"
+
+      - name: daily_loss_percentage
+        data_type: float
+        description: "Daily loss percentage"
+
+      - name: daily_curtailment_percentage
+        data_type: float
+        description: "Daily curtailment percentage"
+
+      - name: total_hours
+        data_type: number
+        description: "Total hours in the day with data"
+
+      - name: generating_hours
+        data_type: number
+        description: "Hours with non-zero generation"
+
+      - name: high_output_hours
+        data_type: number
+        description: "Hours with capacity factor > 0.5"
+
+      - name: generating_hours_pct
+        data_type: float
+        description: "Percentage of hours with generation"
+
+      - name: excellent_hours
+        data_type: number
+        description: "Hours rated Excellent"
+
+      - name: good_hours
+        data_type: number
+        description: "Hours rated Good"
+
+      - name: fair_hours
+        data_type: number
+        description: "Hours rated Fair"
+
+      - name: poor_hours
+        data_type: number
+        description: "Hours rated Poor"
+
+      - name: avg_wind_speed_mps
+        data_type: float
+        description: "Average daily wind speed"
+
+      - name: max_wind_speed_mps
+        data_type: float
+        description: "Maximum daily wind speed"
+
+      - name: avg_ghi
+        data_type: float
+        description: "Average daily GHI"
+
+      - name: max_ghi
+        data_type: float
+        description: "Maximum daily GHI"
+
+      - name: total_ghi
+        data_type: float
+        description: "Total daily GHI"
+
+      - name: avg_temperature_c
+        data_type: float
+        description: "Average daily temperature"
+
+      - name: strong_wind_hours
+        data_type: number
+        description: "Hours with strong wind"
+
+      - name: daylight_hours
+        data_type: number
+        description: "Hours with GHI > 0"
+
+      - name: data_validity_pct
+        data_type: float
+        description: "Percentage of valid data observations"
+
+      - name: data_completeness_pct
+        data_type: float
+        description: "Percentage of complete weather observations"
+
+      - name: zero_generation_anomaly_count
+        data_type: number
+        description: "Count of zero-generation anomalies"
+
+      - name: daily_performance_rating
+        data_type: varchar
+        description: "Daily performance rating (High/Medium/Low)"
+
+      - name: meets_availability_target
+        data_type: boolean
+        description: "Whether availability target is met"
+
+      - name: has_high_quality_data
+        data_type: boolean
+        description: "Whether data quality thresholds are met"
+
+      - name: first_generation_timestamp
+        data_type: timestamp_ntz
+        description: "First generation timestamp of the day"
+
+      - name: last_generation_timestamp
+        data_type: timestamp_ntz
+        description: "Last generation timestamp of the day"
+
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:
             - asset_id
             - date
-  
+
   - name: mart_asset_weather_performance
     description: "Weather-adjusted performance mart with correlations and performance scores"
+    config:
+      contract:
+        enforced: true
     columns:
       - name: asset_id
+        data_type: varchar
         description: "Unique asset identifier"
+        constraints:
+          - type: not_null
         tests:
           - not_null
-      
+
       - name: date
+        data_type: timestamp_ntz
         description: "Date of performance"
+        constraints:
+          - type: not_null
         tests:
           - not_null
-      
+
+      - name: asset_capacity_mw
+        data_type: float
+        description: "Asset nameplate capacity in MW"
+
       - name: wind_generation_correlation
+        data_type: float
         description: "Correlation between wind speed and generation"
         tests:
           - dbt_utils.accepted_range:
               min_value: -1
               max_value: 1
-      
+
       - name: solar_generation_correlation
+        data_type: float
         description: "Correlation between GHI and generation"
         tests:
           - dbt_utils.accepted_range:
               min_value: -1
               max_value: 1
-      
+
+      - name: wind_cf_correlation
+        data_type: float
+        description: "Correlation between wind speed and capacity factor"
+
+      - name: solar_cf_correlation
+        data_type: float
+        description: "Correlation between GHI and capacity factor"
+
+      - name: wind_r_squared
+        data_type: float
+        description: "R-squared for wind regression model"
+
+      - name: solar_r_squared
+        data_type: float
+        description: "R-squared for solar regression model"
+
+      - name: wind_regression_slope
+        data_type: float
+        description: "Wind regression slope coefficient"
+
+      - name: wind_regression_intercept
+        data_type: float
+        description: "Wind regression intercept"
+
+      - name: solar_regression_slope
+        data_type: float
+        description: "Solar regression slope coefficient"
+
+      - name: solar_regression_intercept
+        data_type: float
+        description: "Solar regression intercept"
+
+      - name: avg_expected_generation_mwh
+        data_type: float
+        description: "Average expected generation based on weather model"
+
+      - name: avg_actual_generation_mwh
+        data_type: float
+        description: "Average actual generation"
+
+      - name: avg_performance_ratio_pct
+        data_type: float
+        description: "Average performance ratio percentage"
+
       - name: performance_score
+        data_type: float
         description: "Weather-adjusted performance score (0-100)"
+        constraints:
+          - type: not_null
         tests:
           - not_null
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 100
-      
+
+      - name: performance_category
+        data_type: varchar
+        description: "Performance category (Excellent/Good/Fair/Poor)"
+
+      - name: rolling_7d_avg_generation
+        data_type: float
+        description: "7-day rolling average generation"
+
+      - name: rolling_7d_avg_cf
+        data_type: float
+        description: "7-day rolling average capacity factor"
+
+      - name: rolling_30d_avg_generation
+        data_type: float
+        description: "30-day rolling average generation"
+
+      - name: rolling_30d_avg_cf
+        data_type: float
+        description: "30-day rolling average capacity factor"
+
       - name: inferred_asset_type
+        data_type: varchar
         description: "Inferred asset type based on weather correlations"
+        constraints:
+          - type: not_null
         tests:
           - not_null
           - accepted_values:
               values: ['wind', 'solar']
-    
+
+      - name: total_hourly_observations
+        data_type: number
+        description: "Total hourly observations used for correlation"
+
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns:

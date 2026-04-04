@@ -1,0 +1,9 @@
+locations:
+  - location_name: weather_analytics
+    code_source:
+      module_name: weather_analytics.definitions
+    working_directory: .
+    build:
+      commands:
+        - "pip install -e '.[dev]'"
+        - "cd dbt/renewable_dbt && dbt parse"

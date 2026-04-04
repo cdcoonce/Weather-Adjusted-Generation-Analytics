@@ -1,0 +1,102 @@
+semantic_models:
+  - name: asset_performance
+    defaults:
+      agg_time_dimension: date
+    description: "Daily asset performance metrics for renewable energy assets"
+    model: ref('mart_asset_performance_daily')
+    entities:
+      - name: asset_id
+        type: primary
+        expr: asset_id
+    dimensions:
+      - name: date
+        type: time
+        type_params:
+          time_granularity: day
+        expr: date
+      - name: asset_size_category
+        type: categorical
+        expr: asset_size_category
+      - name: daily_performance_rating
+        type: categorical
+        expr: daily_performance_rating
+    measures:
+      - name: total_generation
+        agg: sum
+        expr: total_net_generation_mwh
+        description: "Total net generation in MWh"
+      - name: avg_capacity_factor
+        agg: average
+        expr: daily_capacity_factor
+        description: "Average daily capacity factor"
+      - name: avg_temperature
+        agg: average
+        expr: avg_temperature_c
+        description: "Average temperature in Celsius"
+      - name: avg_availability
+        agg: average
+        expr: avg_availability_pct
+        description: "Average availability percentage"
+      - name: total_curtailment
+        agg: sum
+        expr: total_curtailment_mwh
+        description: "Total curtailment in MWh"
+
+  - name: asset_weather_performance
+    defaults:
+      agg_time_dimension: weather_date
+    description: "Weather-adjusted performance metrics with correlations"
+    model: ref('mart_asset_weather_performance')
+    entities:
+      - name: asset_id
+        type: foreign
+        expr: asset_id
+      - name: weather_asset
+        type: primary
+        expr: asset_id
+    dimensions:
+      - name: weather_date
+        type: time
+        type_params:
+          time_granularity: day
+        expr: date
+      - name: inferred_asset_type
+        type: categorical
+        expr: inferred_asset_type
+      - name: performance_category
+        type: categorical
+        expr: performance_category
+    measures:
+      - name: avg_performance_score
+        agg: average
+        expr: performance_score
+        description: "Average weather-adjusted performance score (0-100)"
+      - name: avg_actual_generation
+        agg: average
+        expr: avg_actual_generation_mwh
+        description: "Average actual generation in MWh"
+      - name: avg_expected_generation
+        agg: average
+        expr: avg_expected_generation_mwh
+        description: "Average expected generation based on weather model"
+      - name: avg_performance_ratio
+        agg: average
+        expr: avg_performance_ratio_pct
+        description: "Average performance ratio percentage"
+
+metrics:
+  - name: daily_generation
+    type: simple
+    label: "Daily Generation (MWh)"
+    type_params:
+      measure: total_generation
+  - name: generation_efficiency
+    type: simple
+    label: "Average Capacity Factor"
+    type_params:
+      measure: avg_capacity_factor
+  - name: weather_adjusted_score
+    type: simple
+    label: "Weather-Adjusted Performance Score"
+    type_params:
+      measure: avg_performance_score

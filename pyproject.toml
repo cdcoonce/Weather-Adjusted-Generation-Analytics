@@ -10,14 +10,17 @@ requires-python = ">=3.12"
 license = {text = "MIT"}
 
 dependencies = [
-    "dagster>=1.5.0",
-    "dagster-webserver>=1.5.0",
-    "dagster-dbt>=0.21.0",
+    "dagster>=1.9.0,<1.12.20",
+    "dagster-webserver>=1.9.0,<1.12.20",
+    "dagster-dbt>=0.25.0",
     "dbt-core>=1.5.0",
-    "dbt-duckdb>=1.5.0",
+    "dbt-snowflake>=1.5.0",
     "polars[rtcompat]>=0.19.0",
-    "duckdb>=0.9.0",
-    "dlt[duckdb]>=0.4.0",
+    "dlt[snowflake]>=0.4.0",
+    "snowflake-connector-python>=3.6.0,<4.0.0",
+    "dagster-cloud>=1.9.0,<1.12.20",
+    "dagster-snowflake>=0.25.0",
+    "cryptography>=41.0.0",
     "python-dotenv>=1.0.0",
     "pydantic>=2.5.0",
     "pydantic-settings>=2.1.0",
@@ -49,7 +52,7 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.hatch.build.targets.wheel]
-packages = ["weather_adjusted_generation_analytics"]
+packages = ["weather_adjusted_generation_analytics", "src/weather_analytics"]
 
 [tool.ruff]
 line-length = 88
@@ -74,15 +77,16 @@ warn_no_return = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["dagster.*", "dlt.*", "polars.*", "duckdb.*"]
+module = ["dagster.*", "dlt.*", "polars.*", "duckdb.*", "snowflake.*", "cryptography.*"]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
+pythonpath = ["src"]
 testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --strict-markers --cov=weather_adjusted_generation_analytics --cov-report=term-missing"
+addopts = "-v --strict-markers --cov=weather_adjusted_generation_analytics --cov=src/weather_analytics --cov-report=term-missing"
 markers = [
     "unit: fast, isolated unit tests",
     "integration: slower tests that touch external systems",
@@ -90,6 +94,7 @@ markers = [
     "duckdb: tests that use DuckDB",
     "dagster: tests that exercise Dagster assets/jobs",
     "dbt: tests that validate/run dbt models or compiled SQL",
+    "snowflake: tests that interact with Snowflake",
 ]
 filterwarnings = [
     "error::DeprecationWarning",
@@ -97,6 +102,6 @@ filterwarnings = [
 ]
 
 [tool.dagster]
-module_name = "dags.dagster_project"
+module_name = "weather_analytics"
 working_directory = "."
-pythonpath = ["."]
+pythonpath = [".", "src"]
