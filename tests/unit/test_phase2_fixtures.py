@@ -11,6 +11,13 @@ from pathlib import Path
 
 import pytest
 
+try:
+    import duckdb  # noqa: F401
+
+    _HAS_DUCKDB = True
+except ModuleNotFoundError:
+    _HAS_DUCKDB = False
+
 
 @pytest.mark.unit
 @pytest.mark.io
@@ -25,6 +32,7 @@ def test_parquet_roundtrip_paths_exist(
 
 @pytest.mark.unit
 @pytest.mark.duckdb
+@pytest.mark.skipif(not _HAS_DUCKDB, reason="duckdb not installed")
 def test_duckdb_join_smoke(
     duckdb_conn_in_memory,
     duckdb_loaded_tables,

@@ -35,10 +35,14 @@ from weather_analytics.schedules import (
 
 defs = Definitions(
     assets=[
-        waga_weather_ingestion,
-        waga_generation_ingestion,
-        waga_dbt_assets,
-        waga_correlation_analysis,
+        asset
+        for asset in [
+            waga_weather_ingestion,
+            waga_generation_ingestion,
+            waga_dbt_assets,
+            waga_correlation_analysis,
+        ]
+        if asset is not None
     ],
     asset_checks=[
         waga_weather_freshness_check,
