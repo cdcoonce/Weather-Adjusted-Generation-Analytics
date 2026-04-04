@@ -6,11 +6,11 @@ We materialize selected assets in-process against a temp DuckDB.
 
 from __future__ import annotations
 
-from pathlib import Path
 from datetime import datetime
+from pathlib import Path
 from types import SimpleNamespace
 
-import duckdb
+duckdb = __import__("pytest").importorskip("duckdb")
 import polars as pl
 import pytest
 from dagster import materialize
