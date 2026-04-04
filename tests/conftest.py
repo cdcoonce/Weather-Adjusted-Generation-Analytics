@@ -1,9 +1,4 @@
-"""Pytest configuration and shared fixtures.
-
-Fixtures in this file are intentionally minimal for Phase 1.
-As the test suite grows, move larger fixtures/factories into `tests/fixtures/`.
-
-"""
+"""Pytest configuration and shared fixtures."""
 
 from __future__ import annotations
 
@@ -12,22 +7,9 @@ from pathlib import Path
 import polars as pl
 import pytest
 
-from weather_adjusted_generation_analytics.config.settings import Config
-
-try:
-    import duckdb
-
-    from tests.fixtures.duckdb_fixtures import (
-        DuckDBDatasetSpec,
-        load_weather_and_generation,
-    )
-
-    _HAS_DUCKDB = True
-except ModuleNotFoundError:
-    _HAS_DUCKDB = False
-
 from tests.fixtures.parquet_builders import read_parquet, write_parquet
 from tests.fixtures.polars_factories import generation_df_small, weather_df_small
+from weather_adjusted_generation_analytics.config.settings import Config
 
 
 @pytest.fixture
@@ -114,41 +96,6 @@ def repo_weather_sample_parquet(repo_sample_data_dir: Path) -> Path:
 def repo_generation_sample_parquet(repo_sample_data_dir: Path) -> Path:
     """Committed generation sample parquet path (if present)."""
     return repo_sample_data_dir / "generation_2023-01-01.parquet"
-
-
-if _HAS_DUCKDB:
-
-    @pytest.fixture
-    def duckdb_conn_in_memory() -> duckdb.DuckDBPyConnection:
-        """In-memory DuckDB connection scoped to a single test."""
-        conn = duckdb.connect(":memory:")
-        try:
-            yield conn
-        finally:
-            conn.close()
-
-    @pytest.fixture
-    def duckdb_conn_file(temp_config: Config) -> duckdb.DuckDBPyConnection:
-        """File-backed DuckDB connection scoped to a single test."""
-        temp_config.duckdb_path.parent.mkdir(parents=True, exist_ok=True)
-        conn = duckdb.connect(str(temp_config.duckdb_path))
-        try:
-            yield conn
-        finally:
-            conn.close()
-
-    @pytest.fixture
-    def duckdb_loaded_tables(
-        duckdb_conn_in_memory: duckdb.DuckDBPyConnection,
-        weather_df: pl.DataFrame,
-        generation_df: pl.DataFrame,
-    ) -> DuckDBDatasetSpec:
-        """Load weather + generation DataFrames into DuckDB and return naming spec."""
-        return load_weather_and_generation(
-            conn=duckdb_conn_in_memory,
-            weather_df=weather_df,
-            generation_df=generation_df,
-        )
 
 
 @pytest.fixture

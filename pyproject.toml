@@ -91,7 +91,6 @@ markers = [
     "unit: fast, isolated unit tests",
     "integration: slower tests that touch external systems",
     "io: filesystem I/O tests",
-    "duckdb: tests that use DuckDB",
     "dagster: tests that exercise Dagster assets/jobs",
     "dbt: tests that validate/run dbt models or compiled SQL",
     "snowflake: tests that interact with Snowflake",
