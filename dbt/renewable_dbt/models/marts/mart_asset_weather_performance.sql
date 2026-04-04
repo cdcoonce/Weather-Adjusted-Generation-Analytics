@@ -266,11 +266,11 @@ final_mart AS (
         ac.total_observations AS total_hourly_observations
         
     FROM asset_correlations ac
-    CROSS JOIN daily_performance_scores ps
-    LEFT JOIN rolling_correlations rc
+    INNER JOIN daily_performance_scores ps
         ON ac.asset_id = ps.asset_id
+    LEFT JOIN rolling_correlations rc
+        ON ac.asset_id = rc.asset_id
         AND ps.date = rc.date
-    WHERE ac.asset_id = ps.asset_id
 )
 
 SELECT * FROM final_mart

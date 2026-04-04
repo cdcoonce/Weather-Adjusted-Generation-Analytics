@@ -32,9 +32,9 @@ models:
       +docs:
         node_color: "#8BC34A"
     
-    # Intermediate models - views for business logic
+    # Intermediate models - ephemeral for business logic
     intermediate:
-      +materialized: view
+      +materialized: ephemeral
       +schema: intermediate
       +docs:
         node_color: "#FF9800"

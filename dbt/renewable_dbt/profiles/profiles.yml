@@ -2,19 +2,12 @@ renewable_dbt:
   target: dev
   outputs:
     dev:
-      type: duckdb
-      path: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/data/warehouse.duckdb
-      schema: renewable_energy
+      type: snowflake
+      account: "{{ env_var('WAGA_SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('WAGA_SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('WAGA_SNOWFLAKE_PRIVATE_KEY_PATH', '') }}"
+      role: "{{ env_var('WAGA_SNOWFLAKE_ROLE') }}"
+      warehouse: "{{ env_var('WAGA_SNOWFLAKE_WAREHOUSE') }}"
+      database: "{{ env_var('WAGA_SNOWFLAKE_DATABASE', 'WAGA') }}"
+      schema: STAGING
       threads: 4
-      extensions:
-        - parquet
-        - httpfs
-    
-    prod:
-      type: duckdb
-      path: /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics/data/warehouse_prod.duckdb
-      schema: renewable_energy
-      threads: 8
-      extensions:
-        - parquet
-        - httpfs

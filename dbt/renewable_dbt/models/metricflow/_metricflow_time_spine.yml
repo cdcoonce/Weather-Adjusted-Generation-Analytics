@@ -1,0 +1,11 @@
+models:
+  - name: metricflow_time_spine
+    description: "Time spine table required by MetricFlow for metric calculations"
+    config:
+      materialized: table
+    time_spine:
+      standard_granularity_column: date_day
+    columns:
+      - name: date_day
+        description: "Calendar date"
+        granularity: day
