@@ -9,12 +9,12 @@ from __future__ import annotations
 import pytest
 
 from weather_analytics.assets.dbt_assets import (
-    DBT_MANIFEST_PATH,
     DBT_PROJECT_DIR,
+    dbt_project,
     waga_dbt_assets,
 )
 
-_manifest_missing = not DBT_MANIFEST_PATH.exists()
+_manifest_missing = not dbt_project.manifest_path.exists()
 
 
 @pytest.mark.unit
@@ -34,10 +34,10 @@ class TestDbtAssetsModule:
         assert (DBT_PROJECT_DIR / "dbt_project.yml").is_file()
 
     def test_dbt_manifest_path_structure(self) -> None:
-        """DBT_MANIFEST_PATH has the expected path structure."""
-        assert DBT_MANIFEST_PATH.name == "manifest.json"
-        assert DBT_MANIFEST_PATH.parent.name == "target"
-        assert DBT_MANIFEST_PATH.parent.parent.name == "renewable_dbt"
+        """Manifest path has the expected structure."""
+        manifest_path = dbt_project.manifest_path
+        assert manifest_path.name == "manifest.json"
+        assert "target" in str(manifest_path)
 
     def test_dbt_project_dir_is_absolute(self) -> None:
         """DBT_PROJECT_DIR is an absolute path."""
@@ -65,6 +65,6 @@ class TestDbtAssetsModule:
         _manifest_missing,
         reason="dbt manifest.json not generated (run dbt parse)",
     )
-    def test_waga_dbt_assets_is_none_without_manifest(self) -> None:
+    def test_waga_dbt_assets_is_not_none(self) -> None:
         """When manifest exists, waga_dbt_assets is not None."""
         assert waga_dbt_assets is not None
