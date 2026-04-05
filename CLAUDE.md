@@ -36,8 +36,7 @@ Parquet/API sources
   - `models/marts/` — contracted tables
   - `models/semantic_models/` — dbt metrics layer
   - `profiles/profiles.yml` — Snowflake key-pair auth with env var templating
-- `weather_adjusted_generation_analytics/` — **Legacy** package (DuckDB-based, kept for reference)
-- `tests/` — pytest suite (unit tests only; DuckDB integration tests removed)
+- `tests/` — pytest suite (unit tests only)
 
 ### Snowflake Schemas
 
@@ -87,9 +86,14 @@ Parquet/API sources
 - **Empty mart guard**: Analytics assets raise `dagster.Failure` if source mart has fewer than 10 rows.
 - **Merge idempotency**: dlt uses `write_disposition="merge"` on `(asset_id, timestamp)` — running ingestion twice produces no duplicates.
 
-## CI
+## CI / Deployment
 
-GitHub Actions runs lint (ruff) then unit tests on every push/PR to main. No integration test job — Snowflake integration tests will be added when credentials are available in CI.
+- **`ci.yml`** — Lint (ruff) + unit tests on every push/PR to main
+- **`deploy.yml`** — Dagster Cloud serverless prod deploy on push to main (test → dbt manifest → deploy)
+- **`branch_deployments.yml`** — Ephemeral branch deploys on PRs for preview environments
+- **Dagster Cloud org**: `charles-likes-data.dagster.plus`
+- **dbt manifest**: Generated in deploy workflows via `dbt parse` with Snowflake secrets injected
+- **`_ensure_key_file()`**: Decodes `WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64` to temp `.p8` file at runtime for dbt-snowflake
 
 ## Planning
 

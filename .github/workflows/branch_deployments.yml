@@ -1,0 +1,117 @@
+name: Serverless Branch Deployments
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, closed]
+
+concurrency:
+  group: ${{ github.ref }}/branch_deployments
+  cancel-in-progress: true
+
+env:
+  DAGSTER_CLOUD_URL: "https://charles-likes-data.dagster.plus"
+  DAGSTER_CLOUD_API_TOKEN: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+  ENABLE_FAST_DEPLOYS: 'true'
+  PYTHON_VERSION: '3.12'
+  DAGSTER_CLOUD_FILE: 'dagster_cloud.yaml'
+
+permissions:
+  contents: read
+  pull-requests: write
+
+jobs:
+  test:
+    name: Run Tests
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install dependencies
+        run: pip install uv && uv sync --extra dev
+      - name: Run tests
+        run: uv run python -m pytest -m unit -q
+
+  dagster_cloud_default_deploy:
+    needs: [test]
+    name: Dagster Serverless Deploy
+    runs-on: ubuntu-22.04
+    outputs:
+      build_info: ${{ steps.parse-workspace.outputs.build_info }}
+
+    steps:
+      - name: Prerun Checks
+        id: prerun
+        uses: dagster-io/dagster-cloud-action/actions/utils/prerun@v1.12.19
+
+      - name: Launch Docker Deploy
+        if: steps.prerun.outputs.result == 'docker-deploy'
+        id: parse-workspace
+        uses: dagster-io/dagster-cloud-action/actions/utils/parse_workspace@v1.12.19
+        with:
+          dagster_cloud_file: $DAGSTER_CLOUD_FILE
+
+      - name: Checkout for Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+          path: project-repo
+
+      - name: Set up Python
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Generate dbt manifest
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        run: |
+          cd project-repo
+          pip install "dbt-core>=1.7,<2" "dbt-snowflake>=1.7,<2"
+          cd dbt/renewable_dbt
+          dbt deps
+          dbt parse --profiles-dir profiles
+        env:
+          WAGA_SNOWFLAKE_ACCOUNT: ${{ secrets.WAGA_SNOWFLAKE_ACCOUNT }}
+          WAGA_SNOWFLAKE_USER: ${{ secrets.WAGA_SNOWFLAKE_USER }}
+          WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64: ${{ secrets.WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64 }}
+          WAGA_SNOWFLAKE_WAREHOUSE: ${{ secrets.WAGA_SNOWFLAKE_WAREHOUSE }}
+          WAGA_SNOWFLAKE_DATABASE: ${{ secrets.WAGA_SNOWFLAKE_DATABASE }}
+          WAGA_SNOWFLAKE_ROLE: ${{ secrets.WAGA_SNOWFLAKE_ROLE }}
+
+      - name: Python Executable Deploy
+        if: steps.prerun.outputs.result == 'pex-deploy'
+        uses: dagster-io/dagster-cloud-action/actions/build_deploy_python_executable@v1.12.19
+        with:
+          dagster_cloud_file: "$GITHUB_WORKSPACE/project-repo/$DAGSTER_CLOUD_FILE"
+          build_output_dir: "$GITHUB_WORKSPACE/build"
+          python_version: "${{ env.PYTHON_VERSION }}"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  dagster_cloud_docker_deploy:
+    name: Docker Deploy
+    runs-on: ubuntu-22.04
+    if: needs.dagster_cloud_default_deploy.outputs.build_info
+    needs: dagster_cloud_default_deploy
+    strategy:
+      fail-fast: false
+      matrix:
+        location: ${{ fromJSON(needs.dagster_cloud_default_deploy.outputs.build_info) }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.head_ref }}
+      - name: Build and deploy to Dagster Cloud serverless
+        uses: dagster-io/dagster-cloud-action/actions/serverless_branch_deploy@v1.12.19
+        with:
+          dagster_cloud_api_token: ${{ secrets.DAGSTER_CLOUD_API_TOKEN }}
+          location: ${{ toJson(matrix.location) }}
+          base_image: "python:${{ env.PYTHON_VERSION }}-slim"
+          organization_id: ${{ secrets.ORGANIZATION_ID }}
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

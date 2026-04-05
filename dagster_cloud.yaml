@@ -6,4 +6,4 @@ locations:
     build:
       commands:
         - "pip install -e '.[dev]'"
-        - "cd dbt/renewable_dbt && dbt parse"
+        - "cd dbt/renewable_dbt && dbt deps && dbt parse --profiles-dir profiles"
