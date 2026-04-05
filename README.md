@@ -1,342 +1,174 @@
-# Renewable Asset Performance Pipeline
+# Weather Adjusted Generation Analytics (WAGA)
 
 [![Python 3.12+](https://img.shields.io/badge/python-3.12+-blue.svg)](https://www.python.org/downloads/)
 [![Code style: ruff](https://img.shields.io/badge/code%20style-ruff-000000.svg)](https://github.com/astral-sh/ruff)
 
-A production-grade analytics engineering pipeline for weather-adjusted renewable energy asset performance analysis. This project demonstrates modern data engineering practices using Dagster orchestration, dlt ingestion, dbt transformations, and Polars for efficient data processing.
+A production-grade analytics pipeline for weather-adjusted renewable energy asset performance analysis. Built with Dagster (orchestration), dlt (ingestion), dbt (transformation), Polars (analytics), and Snowflake (warehouse).
 
 ---
 
-## **Table of Contents**
-
-- [Project Overview](#project-overview)
-- [Architecture](#architecture)
-- [Data Model](#data-model)
-- [KPI & Metrics](#kpi--metrics)
-- [Getting Started](#getting-started)
-- [Usage](#usage)
-- [Project Structure](#project-structure)
-- [Development](#development)
-- [Future Enhancements](#future-enhancements)
-- [Contributing](#contributing)
-- [License](#license)
-
----
-
-## **Project Overview**
-
-This pipeline analyzes the performance of 5-10 renewable energy assets (wind and solar) by correlating hourly weather data with generation output. The system computes capacity factors, weather-normalized performance metrics, and rolling correlations to provide actionable insights for asset management.
-
-**Key Features:**
-
-- **Orchestration**: Dagster for modular, testable data workflows
-- **Ingestion**: dlt for incremental loading from Parquet to DuckDB
-- **Transformation**: dbt for dimensional modeling and business logic
-- **Processing**: Polars for high-performance data manipulation
-- **Storage**: DuckDB as an embedded analytical warehouse
-
----
-
-## **Architecture**
+## Architecture
 
 ```
-┌─────────────────┐
-│  Mock Data Gen  │
-│   (Polars)      │
-└────────┬────────┘
-         │ Parquet Files
-         ▼
-┌─────────────────┐
-│   dlt Loader    │
-│  (Incremental)  │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│    DuckDB       │
-│   (Warehouse)   │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│   dbt Models    │
-│  (Transform)    │
-└────────┬────────┘
-         │
-         ▼
-┌─────────────────┐
-│  Analytics      │
-│  Marts          │
-└─────────────────┘
-
-       ▲
-       │
-  Dagster
-  Orchestration
+Parquet / API sources
+  -> dlt ingestion assets (Snowflake destination, merge disposition)
+  -> Snowflake WAGA database (RAW schema)
+  -> dbt transformations (@dbt_assets in Dagster)
+     staging (views) -> intermediate (ephemeral) -> marts (tables, contracted)
+  -> Polars analytics assets (LazyFrame API, ANALYTICS schema)
+  -> dbt semantic layer (metrics for BI tools)
 ```
 
-**Data Flow:**
+**Data flow:**
 
-1. **Generation**: Mock data generators create realistic hourly weather and generation data
-2. **Ingestion**: dlt pipelines incrementally load Parquet files into DuckDB
-3. **Staging**: dbt staging models apply initial transformations and data quality checks
-4. **Intermediate**: Daily aggregations and asset-weather joins
-5. **Marts**: Final analytical tables with KPIs and performance metrics
+1. **Ingestion** -- dlt reads Parquet files and merges into `WAGA.RAW` on `(asset_id, timestamp)`
+2. **Staging** -- dbt views in `WAGA.STAGING` apply initial transformations
+3. **Intermediate** -- Ephemeral dbt models for daily aggregations and asset-weather joins
+4. **Marts** -- Contracted dbt tables in `WAGA.MARTS` with enforced column types
+5. **Analytics** -- Polars correlation analysis writes to `WAGA.ANALYTICS`
+6. **Semantic layer** -- dbt metrics (`daily_generation`, `generation_efficiency`) for downstream BI
+
+All orchestrated by Dagster with asset checks (freshness, row count, value range) and schedules (daily ingestion, daily dbt, weekly analytics).
 
 ---
 
-## **Data Model**
+## Data Model
 
-### **Source Tables**
+### Source Tables (RAW)
 
-**`weather`**
-- `timestamp` (TIMESTAMP)
-- `asset_id` (VARCHAR)
-- `wind_speed_mps` (DOUBLE)
-- `wind_direction_deg` (DOUBLE)
-- `ghi` (DOUBLE) — Global Horizontal Irradiance
-- `temperature_c` (DOUBLE)
-- `pressure_hpa` (DOUBLE)
-- `relative_humidity` (DOUBLE)
+| Table        | Key Columns                                                                                                                       |
+| ------------ | --------------------------------------------------------------------------------------------------------------------------------- |
+| `weather`    | `asset_id`, `timestamp`, `wind_speed_mps`, `ghi`, `temperature_c`, `pressure_hpa`, `relative_humidity`                            |
+| `generation` | `asset_id`, `timestamp`, `gross_generation_mwh`, `net_generation_mwh`, `curtailment_mwh`, `availability_pct`, `asset_capacity_mw` |
 
-**`generation`**
-- `timestamp` (TIMESTAMP)
-- `asset_id` (VARCHAR)
-- `gross_generation_mwh` (DOUBLE)
-- `net_generation_mwh` (DOUBLE)
-- `curtailment_mwh` (DOUBLE)
-- `availability_pct` (DOUBLE)
-- `asset_capacity_mw` (DOUBLE)
+### Mart Tables
 
-### **Mart Tables**
+| Table                            | Purpose                                                                       |
+| -------------------------------- | ----------------------------------------------------------------------------- |
+| `mart_asset_performance_daily`   | Daily capacity factors, generation summaries, availability metrics            |
+| `mart_asset_weather_performance` | Weather-normalized performance, correlation coefficients, performance scoring |
 
-**`mart_asset_performance_daily`**
-- Daily capacity factors
-- Generation summaries
-- Availability metrics
+### Key Metrics
 
-**`mart_asset_weather_performance`**
-- Weather-normalized performance
-- Correlation coefficients
-- Performance scoring
+- **Capacity Factor** = Net Generation (MWh) / (Asset Capacity (MW) x Hours)
+- **Rolling Correlations** -- 7-day and 30-day Pearson correlations (wind speed <-> generation, GHI <-> generation)
+- **Performance Score** -- Normalized 0-100 comparing actual vs. expected generation
 
 ---
 
-## **KPI & Metrics**
+## Getting Started
 
-### **Capacity Factor**
-```
-Capacity Factor = Net Generation (MWh) / (Asset Capacity (MW) × Hours)
-```
-
-### **Weather-Adjusted Expected Generation**
-Regression-based model predicting expected generation from weather conditions.
-
-### **Rolling Correlations**
-7-day and 30-day Pearson correlations between:
-- Wind speed ↔ Wind generation
-- GHI ↔ Solar generation
-
-### **Performance Score**
-Normalized score (0-100) comparing actual vs. expected generation.
-
----
-
-## **Getting Started**
-
-### **Prerequisites**
+### Prerequisites
 
 - Python 3.12+
 - [uv](https://github.com/astral-sh/uv) package manager
+- Snowflake account with key-pair authentication
 
-### **Installation**
-
-1. Clone the repository:
-   ```bash
-   cd /Users/cdcoonce/Documents/GitHub/Weather_Adjusted_Generation_Analytics
-   ```
-
-2. Install dependencies:
-   ```bash
-   uv sync
-   ```
-
-3. Copy environment configuration:
-   ```bash
-   cp .env.example .env
-   ```
-
-4. Create data directories:
-   ```bash
-   mkdir -p data/raw/weather data/raw/generation data/intermediate data/processed
-   ```
-
----
-
-## **Usage**
-
-### **1. Generate Mock Data**
+### Installation
 
 ```bash
-uv run python weather_adjusted_generation_analytics/mock_data/generate_weather.py
-uv run python weather_adjusted_generation_analytics/mock_data/generate_generation.py
+git clone https://github.com/cdcoonce/Weather-Adjusted-Generation-Analytics.git
+cd Weather-Adjusted-Generation-Analytics
+uv sync
+cp .env.example .env
+# Edit .env with your WAGA_SNOWFLAKE_* credentials
 ```
 
-This creates 2 years of hourly data for 10 assets as Parquet files.
+### Environment Variables
 
-### **2. Run dlt Ingestion**
+All prefixed `WAGA_` -- see `.env.example` for the full list:
+
+| Variable                            | Description                     |
+| ----------------------------------- | ------------------------------- |
+| `WAGA_SNOWFLAKE_ACCOUNT`            | Snowflake account identifier    |
+| `WAGA_SNOWFLAKE_USER`               | Service account username        |
+| `WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64` | Base64-encoded PEM private key  |
+| `WAGA_SNOWFLAKE_PRIVATE_KEY_PATH`   | Path to PEM file (for dbt)      |
+| `WAGA_SNOWFLAKE_WAREHOUSE`          | Compute warehouse               |
+| `WAGA_SNOWFLAKE_DATABASE`           | Database name (default: `WAGA`) |
+| `WAGA_SNOWFLAKE_ROLE`               | Snowflake role                  |
+
+### Run Dagster
 
 ```bash
-uv run python weather_adjusted_generation_analytics/loaders/dlt_pipeline.py
+uv run dagster dev
 ```
 
-Loads Parquet data incrementally into DuckDB.
+Access the Dagster UI at http://localhost:3000 to materialize assets.
 
-### **3. Run dbt Transformations**
+### Run dbt
 
 ```bash
 cd dbt/renewable_dbt
 uv run dbt deps
-uv run dbt build
+uv run dbt build --profiles-dir profiles
 ```
 
-### **4. Start Dagster**
+### Run Tests
 
 ```bash
-cd dags/dagster_project
-uv run dagster dev
+uv run pytest -m unit
 ```
 
-Access the Dagster UI at http://localhost:3000
+---
 
-### **5. Explore Analysis Notebooks**
+## Project Structure
+
+```
+Weather_Adjusted_Generation_Analytics/
+├── src/weather_analytics/          # Dagster pipeline package
+│   ├── definitions.py              # Dagster Cloud entry point
+│   ├── assets/
+│   │   ├── ingestion/              # dlt ingestion (weather, generation)
+│   │   ├── analytics/              # Polars correlation analysis
+│   │   └── dbt_assets.py           # @dbt_assets wrapper
+│   ├── resources/                  # WAGASnowflakeResource, DltIngestionResource
+│   ├── checks/                     # Asset checks (freshness, row count, range)
+│   ├── schedules.py                # Daily/weekly schedules
+│   ├── lib/                        # polars_utils, config, logging
+│   └── mock_data/                  # Weather + generation data generators
+│
+├── dbt/renewable_dbt/              # dbt project (dbt-snowflake)
+│   ├── models/
+│   │   ├── staging/{weather,generation}/
+│   │   ├── intermediate/
+│   │   ├── marts/
+│   │   └── semantic_models/
+│   └── profiles/                   # Snowflake key-pair auth
+│
+├── tests/                          # pytest unit tests
+├── dagster_cloud.yaml              # Dagster Cloud config
+├── .env.example                    # Environment variable template
+└── pyproject.toml                  # Dependencies and tooling
+```
+
+---
+
+## Development
+
+### Code Quality
 
 ```bash
-uv run jupyter lab
+uv run ruff check src/weather_analytics/    # Lint
+uv run ruff format src/weather_analytics/   # Format
+uv run mypy src/weather_analytics/          # Type check
+uv run pytest -m unit                       # Tests
 ```
 
-Open notebooks in `notebooks/` for EDA and correlation analysis.
+### Conventions
+
+- All Dagster assets prefixed `waga_`
+- All env vars prefixed `WAGA_`
+- Python 3.12+ with strict typing, PEP 604 unions
+- Numpy-style docstrings on public functions
+- dbt: staging = views, intermediate = ephemeral, marts = contracted tables
 
 ---
 
-## **Project Structure**
+## License
 
-```
-renewable_performance_pipeline/
-├── README.md                       # This file
-├── COPILOT_INSTRUCTIONS.md         # Project requirements
-├── pyproject.toml                  # Dependencies and tooling
-├── .env.example                    # Environment template
-├── .gitignore
-│
-├── data/                           # Data storage (gitignored)
-│   ├── raw/
-│   │   ├── generation/
-│   │   └── weather/
-│   ├── intermediate/
-│   └── processed/
-│
-├── dags/                           # Dagster orchestration
-│   └── dagster_project/
-│       ├── workspace.yaml
-│       ├── dagster.yaml
-│       ├── assets/                 # Data assets
-│       ├── jobs/                   # Job definitions
-│       ├── schedules/              # Scheduled runs
-│       ├── sensors/                # Event-driven triggers
-│       └── resources/              # Shared resources
-│
-├── dbt/                            # dbt transformations
-│   └── renewable_dbt/
-│       ├── dbt_project.yml
-│       ├── models/
-│       │   ├── staging/            # Source transformations
-│       │   ├── intermediate/       # Business logic
-│       │   ├── marts/              # Analytics tables
-│       │   └── sources.yml
-│       ├── macros/                 # Reusable SQL
-│       ├── tests/                  # Data quality tests
-│       └── profiles/               # Connection profiles
-│
-├── weather_adjusted_generation_analytics/  # Python source code
-│   ├── config/                           # Configuration management
-│   ├── mock_data/                        # Data generators
-│   ├── loaders/                          # dlt pipelines
-│   ├── pipelines/                        # Processing logic
-│   └── utils/                            # Shared utilities
-│
-└── notebooks/                      # Jupyter analysis
-    ├── eda_weather.ipynb
-    ├── eda_generation.ipynb
-    └── correlation_summary.ipynb
-```
+MIT License -- see the LICENSE file for details.
 
 ---
 
-## **Development**
-
-### **Code Quality**
-
-This project enforces strict code quality standards:
-
-- **Type hints**: All functions must include complete type annotations
-- **Docstrings**: NumPy-style documentation for all public interfaces
-- **Linting**: Ruff for fast Python linting
-- **Type checking**: mypy for static type analysis
-- **Testing**: pytest for unit and integration tests
-
-Run quality checks:
-
-```bash
-uv run ruff check .
-uv run mypy weather_adjusted_generation_analytics/
-uv run pytest
-```
-
-### **Pre-commit Hooks**
-
-Install pre-commit hooks:
-
-```bash
-uv run pre-commit install
-```
-
----
-
-## **Future Enhancements**
-
-- [ ] Add real-time streaming ingestion (Kafka/Kinesis)
-- [ ] Implement ML-based anomaly detection
-- [ ] Add weather forecast integration (NOAA, OpenWeatherMap)
-- [ ] Build Grafana/Streamlit dashboard
-- [ ] Expand to support additional asset types (hydro, battery storage)
-- [ ] Add geospatial analysis for regional patterns
-- [ ] Implement data quality monitoring (Great Expectations)
-- [ ] Add CI/CD pipeline (GitHub Actions)
-
----
-
-## **Contributing**
-
-Contributions are welcome! Please follow these guidelines:
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/amazing-feature`)
-3. Ensure code quality checks pass
-4. Commit your changes with clear messages
-5. Push to your branch
-6. Open a Pull Request
-
----
-
-## **License**
-
-This project is licensed under the MIT License - see the LICENSE file for details.
-
----
-
-## **Contact**
-
-For questions or feedback, please open an issue in the GitHub repository.
-
-**Built with ❤️ using Dagster, dbt, Polars, and DuckDB**
+**Built with Dagster, dbt, dlt, Polars, and Snowflake**
