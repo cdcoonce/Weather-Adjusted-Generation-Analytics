@@ -8,6 +8,11 @@ from pydantic import ValidationError
 from weather_analytics.lib.config import WAGAConfig
 
 
+def _config_no_dotenv(**overrides: str) -> WAGAConfig:
+    """Construct WAGAConfig without reading .env file."""
+    return WAGAConfig(_env_file=None, **overrides)  # type: ignore[call-arg]
+
+
 @pytest.mark.unit
 class TestWAGAConfigDefaults:
     """Verify default field values when required env vars are supplied."""
@@ -20,16 +25,21 @@ class TestWAGAConfigDefaults:
         monkeypatch.setenv("WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64", "dGVzdA==")
         monkeypatch.setenv("WAGA_SNOWFLAKE_WAREHOUSE", "WAGA_WH")
         monkeypatch.setenv("WAGA_SNOWFLAKE_ROLE", "WAGA_ROLE")
+        # Clear any .env-sourced values that would override defaults
+        monkeypatch.delenv("WAGA_SNOWFLAKE_PRIVATE_KEY_PATH", raising=False)
+        monkeypatch.delenv("WAGA_SNOWFLAKE_DATABASE", raising=False)
+        monkeypatch.delenv("WAGA_DLT_PIPELINE_NAME", raising=False)
+        monkeypatch.delenv("WAGA_DLT_DATASET_NAME", raising=False)
 
     @pytest.mark.usefixtures("_required_env")
     def test_loads_with_env_vars(self) -> None:
-        cfg = WAGAConfig()
+        cfg = _config_no_dotenv()
         assert cfg.snowflake_account == "xy12345.us-east-1"
         assert cfg.snowflake_user == "svc_waga"
 
     @pytest.mark.usefixtures("_required_env")
     def test_default_values(self) -> None:
-        cfg = WAGAConfig()
+        cfg = _config_no_dotenv()
         assert cfg.snowflake_database == "WAGA"
         assert cfg.snowflake_private_key_path == ""
         assert cfg.dlt_pipeline_name == "waga_ingestion"
@@ -52,10 +62,7 @@ class TestWAGAConfigValidation:
 
     def test_missing_required_fields_raises(self) -> None:
         with pytest.raises(ValidationError):
-            WAGAConfig(
-                snowflake_account="x",
-                # missing user, key, warehouse, role
-            )
+            _config_no_dotenv(snowflake_account="x")
 
     def test_mock_asset_count_lower_bound(
         self, monkeypatch: pytest.MonkeyPatch
@@ -67,7 +74,7 @@ class TestWAGAConfigValidation:
         monkeypatch.setenv("WAGA_SNOWFLAKE_ROLE", "r")
         monkeypatch.setenv("WAGA_MOCK_ASSET_COUNT", "0")
         with pytest.raises(ValidationError):
-            WAGAConfig()
+            _config_no_dotenv()
 
     def test_mock_asset_count_upper_bound(
         self, monkeypatch: pytest.MonkeyPatch
@@ -79,4 +86,4 @@ class TestWAGAConfigValidation:
         monkeypatch.setenv("WAGA_SNOWFLAKE_ROLE", "r")
         monkeypatch.setenv("WAGA_MOCK_ASSET_COUNT", "101")
         with pytest.raises(ValidationError):
-            WAGAConfig()
+            _config_no_dotenv()

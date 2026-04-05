@@ -10,7 +10,11 @@ from dagster import Definitions, EnvVar
 from dagster_dbt import DbtCliResource
 
 from weather_analytics.assets.analytics import waga_correlation_analysis
-from weather_analytics.assets.dbt_assets import DBT_PROJECT_DIR, waga_dbt_assets
+from weather_analytics.assets.dbt_assets import (
+    DBT_PROFILES_DIR,
+    DBT_PROJECT_DIR,
+    waga_dbt_assets,
+)
 from weather_analytics.assets.ingestion import (
     waga_generation_ingestion,
     waga_weather_ingestion,
@@ -79,8 +83,8 @@ defs = Definitions(
             snowflake_role=EnvVar("WAGA_SNOWFLAKE_ROLE"),
         ),
         "dbt": DbtCliResource(
-            project_dir=str(DBT_PROJECT_DIR),
-            profiles_dir=str(DBT_PROJECT_DIR / "profiles"),
+            project_dir=DBT_PROJECT_DIR,
+            profiles_dir=DBT_PROFILES_DIR,
         ),
     },
 )

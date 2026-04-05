@@ -18,11 +18,12 @@ from typing import Any
 
 from dagster_dbt import DbtProject
 
-DBT_PROJECT_DIR: Path = Path(__file__).resolve().parents[3] / "dbt" / "renewable_dbt"
+DBT_PROJECT_DIR = "dbt/renewable_dbt"
+DBT_PROFILES_DIR = "dbt/renewable_dbt/profiles"
 
 dbt_project = DbtProject(
     project_dir=DBT_PROJECT_DIR,
-    profiles_dir=DBT_PROJECT_DIR / "profiles",
+    profiles_dir=DBT_PROFILES_DIR,
 )
 dbt_project.prepare_if_dev()
 
