@@ -19,7 +19,7 @@ waga_daily_ingestion_schedule = ScheduleDefinition(
 
 waga_daily_dbt_schedule = ScheduleDefinition(
     name="waga_daily_dbt",
-    target=AssetSelection.assets("waga_dbt_assets"),
+    target=AssetSelection.groups("default"),
     cron_schedule="0 7 * * *",
     execution_timezone="UTC",
 )
