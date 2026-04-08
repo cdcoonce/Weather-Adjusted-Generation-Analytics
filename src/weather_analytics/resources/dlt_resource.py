@@ -71,11 +71,13 @@ class DltIngestionResource(ConfigurableResource):
         dlt.Pipeline
             A dlt pipeline ready for ``.run()``.
         """
+        pem_str = self._get_private_key_bytes().decode("utf-8")
+
         destination = dlt.destinations.snowflake(
             credentials={
                 "host": self.snowflake_account,
                 "username": self.snowflake_user,
-                "private_key": self.snowflake_private_key_base64,
+                "private_key": pem_str,
                 "database": self.snowflake_database,
                 "warehouse": self.snowflake_warehouse,
                 "role": self.snowflake_role,
