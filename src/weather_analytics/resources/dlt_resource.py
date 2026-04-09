@@ -71,7 +71,23 @@ class DltIngestionResource(ConfigurableResource):
         dlt.Pipeline
             A dlt pipeline ready for ``.run()``.
         """
-        pem_str = self._get_private_key_bytes().decode("utf-8")
+        # Decode base64 PEM → load private key → re-export as PEM string.
+        # This matches WAGASnowflakeResource's decode path and is resilient
+        # to whitespace/newline differences in the base64 env var.
+        from cryptography.hazmat.primitives.serialization import (  # noqa: PLC0415
+            Encoding,
+            NoEncryption,
+            PrivateFormat,
+            load_pem_private_key,
+        )
+
+        pem_bytes = base64.b64decode(self.snowflake_private_key_base64)
+        private_key = load_pem_private_key(pem_bytes, password=None)
+        pem_str = private_key.private_bytes(
+            encoding=Encoding.PEM,
+            format=PrivateFormat.PKCS8,
+            encryption_algorithm=NoEncryption(),
+        ).decode("utf-8")
 
         destination = dlt.destinations.snowflake(
             credentials={

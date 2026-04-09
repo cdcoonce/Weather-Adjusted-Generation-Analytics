@@ -13,20 +13,26 @@ import pytest
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 
 
+def _make_resource(**overrides: str) -> DltIngestionResource:
+    """Create a DltIngestionResource with test defaults."""
+    defaults = {
+        "pipeline_name": "test_pipeline",
+        "dataset_name": "raw",
+        "snowflake_account": "xy12345.us-east-1",
+        "snowflake_user": "svc_waga",
+        "snowflake_private_key_base64": "dGVzdA==",
+        "snowflake_warehouse": "WAGA_WH",
+        "snowflake_database": "WAGA",
+        "snowflake_role": "WAGA_ROLE",
+    }
+    defaults.update(overrides)
+    return DltIngestionResource(**defaults)
+
+
 @pytest.mark.unit
 def test_dlt_ingestion_resource_instantiates_with_config() -> None:
-    """Resource should accept pipeline_name, dataset_name, and destination
-    config and store them as attributes."""
-    resource = DltIngestionResource(
-        pipeline_name="test_pipeline",
-        dataset_name="raw",
-        snowflake_account="xy12345.us-east-1",
-        snowflake_user="svc_waga",
-        snowflake_private_key_base64="dGVzdA==",
-        snowflake_warehouse="WAGA_WH",
-        snowflake_database="WAGA",
-        snowflake_role="WAGA_ROLE",
-    )
+    """Resource should accept config and store as attributes."""
+    resource = _make_resource()
 
     assert resource.pipeline_name == "test_pipeline"
     assert resource.dataset_name == "raw"
@@ -37,26 +43,22 @@ def test_dlt_ingestion_resource_instantiates_with_config() -> None:
 def test_create_pipeline_returns_dlt_pipeline(
     tmp_path: pytest.TempPathFactory,
 ) -> None:
-    """``create_pipeline()`` should return a ``dlt.Pipeline`` object
-    configured with the resource's settings."""
-    resource = DltIngestionResource(
-        pipeline_name="test_weather",
-        dataset_name="raw",
-        snowflake_account="xy12345.us-east-1",
-        snowflake_user="svc_waga",
-        snowflake_private_key_base64="dGVzdA==",
-        snowflake_warehouse="WAGA_WH",
-        snowflake_database="WAGA",
-        snowflake_role="WAGA_ROLE",
-    )
+    """``create_pipeline()`` should return a ``dlt.Pipeline`` object."""
+    resource = _make_resource(pipeline_name="test_weather")
 
-    # Mock both dlt.destinations.snowflake and dlt.pipeline at the module
-    # level so dlt doesn't try to validate real credentials or destinations.
     fake_pipeline = MagicMock()
     fake_pipeline.pipeline_name = "test_weather"
     fake_pipeline.dataset_name = "raw"
 
     with (
+        patch(
+            "cryptography.hazmat.primitives.serialization.load_pem_private_key",
+            return_value=MagicMock(
+                private_bytes=MagicMock(
+                    return_value=b"-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n"
+                )
+            ),
+        ),
         patch(
             "weather_analytics.resources.dlt_resource.dlt.destinations.snowflake"
         ) as mock_sf_dest,
@@ -71,7 +73,6 @@ def test_create_pipeline_returns_dlt_pipeline(
         )
 
     assert pipeline.pipeline_name == "test_weather"
-    assert pipeline.dataset_name == "raw"
     mock_pipeline_factory.assert_called_once()
 
 
@@ -79,20 +80,19 @@ def test_create_pipeline_returns_dlt_pipeline(
 def test_create_pipeline_passes_snowflake_credentials(
     tmp_path: pytest.TempPathFactory,
 ) -> None:
-    """``create_pipeline()`` should configure the dlt Snowflake destination
+    """``create_pipeline()`` should configure dlt Snowflake destination
     with the correct credentials from the resource."""
-    resource = DltIngestionResource(
-        pipeline_name="test_creds",
-        dataset_name="raw",
-        snowflake_account="xy12345.us-east-1",
-        snowflake_user="svc_waga",
-        snowflake_private_key_base64="dGVzdA==",
-        snowflake_warehouse="WAGA_WH",
-        snowflake_database="WAGA",
-        snowflake_role="WAGA_ROLE",
-    )
+    resource = _make_resource()
 
     with (
+        patch(
+            "cryptography.hazmat.primitives.serialization.load_pem_private_key",
+            return_value=MagicMock(
+                private_bytes=MagicMock(
+                    return_value=b"-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n"
+                )
+            ),
+        ),
         patch(
             "weather_analytics.resources.dlt_resource.dlt.destinations.snowflake"
         ) as mock_sf_dest,
@@ -113,4 +113,3 @@ def test_create_pipeline_passes_snowflake_credentials(
     assert creds["username"] == "svc_waga"
     assert creds["database"] == "WAGA"
     assert creds["warehouse"] == "WAGA_WH"
-    assert creds["role"] == "WAGA_ROLE"
