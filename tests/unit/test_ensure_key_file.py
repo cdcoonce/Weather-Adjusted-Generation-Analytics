@@ -8,13 +8,19 @@ from collections.abc import Iterator
 from pathlib import Path
 
 import pytest
+from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+from cryptography.hazmat.primitives.serialization import (
+    Encoding,
+    NoEncryption,
+    PrivateFormat,
+)
 
 from weather_analytics.assets.dbt_assets import _ensure_key_file
 
-_FAKE_PEM = (
-    b"-----BEGIN PRIVATE KEY-----\nfake-key-content\n-----END PRIVATE KEY-----\n"
-)
-_FAKE_B64 = base64.b64encode(_FAKE_PEM).decode()
+# Generate a real (small) private key so load_pem_private_key succeeds.
+_TEST_KEY = Ed25519PrivateKey.generate()
+_TEST_PEM = _TEST_KEY.private_bytes(Encoding.PEM, PrivateFormat.PKCS8, NoEncryption())
+_FAKE_B64 = base64.b64encode(_TEST_PEM).decode()
 
 
 @pytest.fixture(autouse=True)
@@ -49,7 +55,9 @@ def test_creates_file_and_sets_env_var() -> None:
     assert path, "WAGA_SNOWFLAKE_PRIVATE_KEY_PATH should be set"
     assert Path(path).exists(), "Temp .p8 file should exist"
     assert Path(path).suffix == ".p8"
-    assert Path(path).read_bytes() == _FAKE_PEM
+    content = Path(path).read_bytes()
+    assert content.startswith(b"-----BEGIN PRIVATE KEY-----")
+    assert content.endswith(b"-----END PRIVATE KEY-----\n")
 
 
 @pytest.mark.unit

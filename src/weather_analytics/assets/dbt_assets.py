@@ -48,7 +48,23 @@ def _ensure_key_file() -> None:
     if not b64_key:
         return
 
-    pem_bytes = base64.b64decode(b64_key)
+    # Round-trip the key through cryptography to normalize PEM framing.
+    # Raw base64 decode may preserve whitespace/newline issues that cause
+    # dbt-snowflake's "MalformedFraming" error.
+    from cryptography.hazmat.primitives.serialization import (  # noqa: PLC0415
+        Encoding,
+        NoEncryption,
+        PrivateFormat,
+        load_pem_private_key,
+    )
+
+    raw_pem = base64.b64decode(b64_key)
+    private_key = load_pem_private_key(raw_pem, password=None)
+    pem_bytes = private_key.private_bytes(
+        encoding=Encoding.PEM,
+        format=PrivateFormat.PKCS8,
+        encryption_algorithm=NoEncryption(),
+    )
     fd, path = tempfile.mkstemp(suffix=".p8")
     os.write(fd, pem_bytes)
     os.close(fd)
