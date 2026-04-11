@@ -28,7 +28,7 @@ deduplicated_source AS (
 transformed AS (
     SELECT
         -- Primary keys
-        timestamp AS timestamp,
+        timestamp::TIMESTAMP_NTZ AS timestamp,
         asset_id::VARCHAR AS asset_id,
 
         -- Generation measurements
