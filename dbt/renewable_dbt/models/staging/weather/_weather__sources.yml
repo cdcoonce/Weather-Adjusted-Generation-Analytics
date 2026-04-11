@@ -72,3 +72,5 @@ sources:
               combination_of_columns:
                 - asset_id
                 - timestamp
+              config:
+                severity: warn
