@@ -1,33 +1,26 @@
-"""Weather ingestion asset — loads parquet files into Snowflake RAW via dlt."""
+"""Weather ingestion asset — generates mock data into Snowflake RAW."""
 
-import logging
+import time
 from collections.abc import Iterator
-from pathlib import Path
 
 import dlt
-import polars as pl
 from dagster import (
     AssetExecutionContext,
-    Config,
+    DailyPartitionsDefinition,
+    Failure,
     MaterializeResult,
     asset,
 )
 
+from weather_analytics.mock_data.generate_generation import ASSET_CONFIGS
+from weather_analytics.mock_data.generate_weather import generate_weather_data
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 
-logger = logging.getLogger(__name__)
+WEATHER_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
 
-
-class WeatherIngestionConfig(Config):
-    """Run-time configuration for the weather ingestion asset.
-
-    Parameters
-    ----------
-    source_path : str
-        Directory containing ``weather_*.parquet`` files.
-    """
-
-    source_path: str = "data/raw/weather"
+# Must match len(ASSET_CONFIGS) so weather and generation assets
+# produce data for the same set of assets.
+WEATHER_ASSET_COUNT = len(ASSET_CONFIGS)
 
 
 @dlt.resource(
@@ -36,63 +29,43 @@ class WeatherIngestionConfig(Config):
     primary_key=["asset_id", "timestamp"],
 )
 def _weather_dlt_resource(
-    source_path: str,
+    records: list[dict[str, object]],
 ) -> Iterator[dict[str, object]]:
-    """dlt resource that reads weather parquet files and yields records.
+    """dlt resource that yields weather records for Snowflake merge.
 
     Parameters
     ----------
-    source_path : str
-        Directory containing ``weather_*.parquet`` files.
+    records : list[dict[str, object]]
+        Pre-generated weather records.
 
     Yields
     ------
     dict[str, object]
         Individual weather records.
     """
-    parquet_dir = Path(source_path)
-    parquet_files = sorted(parquet_dir.glob("weather_*.parquet"))
-
-    if not parquet_files:
-        logger.warning("No weather parquet files found in %s", source_path)
-        return
-
-    total_rows = 0
-    for file_path in parquet_files:
-        logger.info("Reading %s", file_path.name)
-        df = pl.read_parquet(file_path)
-        records = df.to_dicts()
-        total_rows += len(records)
-        yield from records
-
-    logger.info(
-        "Read %d rows from %d weather parquet files",
-        total_rows,
-        len(parquet_files),
-    )
+    yield from records
 
 
 @asset(
     name="waga_weather_ingestion",
     group_name="waga_ingestion",
+    partitions_def=WEATHER_PARTITIONS,
     op_tags={"dagster/concurrency_key": "waga_ingestion"},
 )
 def waga_weather_ingestion(
     context: AssetExecutionContext,
-    config: WeatherIngestionConfig,
     dlt_ingestion: DltIngestionResource,
 ) -> MaterializeResult:
-    """Ingest weather parquet files into Snowflake RAW.weather via dlt.
+    """Generate mock weather data for a single day and load into Snowflake RAW.
 
-    Uses ``write_disposition="merge"`` on composite key
-    ``(asset_id, timestamp)`` to support idempotent re-runs.
+    Reads ``context.partition_key`` to determine the target date, generates
+    hourly records for all configured assets, and merges into Snowflake via
+    dlt on composite key ``(asset_id, timestamp)``.
 
     Parameters
     ----------
     context : AssetExecutionContext
-        Dagster execution context.
-    config : WeatherIngestionConfig
-        Run-time config with ``source_path``.
+        Dagster execution context (provides partition key).
     dlt_ingestion : DltIngestionResource
         Configured dlt resource providing Snowflake pipeline.
 
@@ -100,10 +73,39 @@ def waga_weather_ingestion(
     -------
     MaterializeResult
         Dagster result with load metadata.
-    """
-    pipeline = dlt_ingestion.create_pipeline()
 
-    weather_data = _weather_dlt_resource(source_path=config.source_path)
+    Raises
+    ------
+    Failure
+        If the generator produces zero rows.
+    """
+    partition_key = context.partition_key
+    start = f"{partition_key}T00:00:00"
+    end = f"{partition_key}T23:00:00"
+
+    df = generate_weather_data(
+        start_date=start,
+        end_date=end,
+        asset_count=WEATHER_ASSET_COUNT,
+        random_seed=int(time.time()),
+    )
+    row_count = len(df)
+
+    if row_count == 0:
+        raise Failure(
+            description=f"Generator returned 0 rows for partition {partition_key}",
+        )
+
+    context.log.info(
+        "Generated %d rows for %d assets on partition %s",
+        row_count,
+        WEATHER_ASSET_COUNT,
+        partition_key,
+    )
+
+    records = df.to_dicts()
+    pipeline = dlt_ingestion.create_pipeline()
+    weather_data = _weather_dlt_resource(records=records)
     load_info = pipeline.run(weather_data)
 
     # Extract metadata for Dagster UI
@@ -115,7 +117,6 @@ def waga_weather_ingestion(
         load_info.metrics.get("rows_loaded", 0) if hasattr(load_info, "metrics") else 0
     )
     if rows_loaded == 0:
-        # Fallback: count from load packages
         for package in load_info.load_packages:
             for job in package.jobs.get("completed_jobs", []):
                 rows_loaded += getattr(job, "rows_count", 0)
@@ -141,6 +142,8 @@ def waga_weather_ingestion(
     return MaterializeResult(
         metadata={
             "load_id": load_id,
+            "partition_key": partition_key,
+            "rows_generated": row_count,
             "rows_loaded": rows_loaded,
             "has_failed_jobs": has_failed,
             "schema_changes": schema_changes,
