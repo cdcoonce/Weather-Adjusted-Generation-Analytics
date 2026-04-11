@@ -57,6 +57,7 @@ class DltIngestionResource(ConfigurableResource):
     def create_pipeline(
         self,
         pipelines_dir: str | None = None,
+        pipeline_name: str | None = None,
     ) -> dlt.Pipeline:
         """Create a configured dlt pipeline with Snowflake destination.
 
@@ -65,6 +66,9 @@ class DltIngestionResource(ConfigurableResource):
         pipelines_dir : str | None
             Override directory for dlt pipeline local state.
             Useful for testing.
+        pipeline_name : str | None
+            Override the default pipeline name. Use this to isolate
+            dlt schema state per asset.
 
         Returns
         -------
@@ -101,7 +105,7 @@ class DltIngestionResource(ConfigurableResource):
         )
 
         kwargs: dict[str, object] = {
-            "pipeline_name": self.pipeline_name,
+            "pipeline_name": pipeline_name or self.pipeline_name,
             "destination": destination,
             "dataset_name": self.dataset_name,
         }

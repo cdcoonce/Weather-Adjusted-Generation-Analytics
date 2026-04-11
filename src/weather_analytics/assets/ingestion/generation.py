@@ -102,7 +102,7 @@ def waga_generation_ingestion(
     )
 
     records = df.to_dicts()
-    pipeline = dlt_ingestion.create_pipeline()
+    pipeline = dlt_ingestion.create_pipeline(pipeline_name="waga_generation")
     generation_data = _generation_dlt_resource(records=records)
     load_info = pipeline.run(generation_data)
 
