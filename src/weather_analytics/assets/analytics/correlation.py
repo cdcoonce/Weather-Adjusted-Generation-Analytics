@@ -167,6 +167,9 @@ def _write_polars_to_snowflake(
     if df.is_empty():
         return
 
+    # Replace NaN with None (SQL NULL) — Snowflake rejects NaN literals.
+    df = df.fill_nan(None)
+
     columns = ", ".join(df.columns)
     placeholders = ", ".join(["%s"] * len(df.columns))
     create_cols = ", ".join(f"{col} {_sf_type(df[col].dtype)}" for col in df.columns)
