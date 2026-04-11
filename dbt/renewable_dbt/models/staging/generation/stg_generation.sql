@@ -45,7 +45,7 @@ transformed AS (
         EXTRACT(MONTH FROM timestamp) AS month,
         EXTRACT(QUARTER FROM timestamp) AS quarter,
         EXTRACT(YEAR FROM timestamp) AS year,
-        DATE_TRUNC('day', timestamp) AS date,
+        DATE_TRUNC('day', timestamp)::TIMESTAMP_NTZ AS date,
 
         -- Derived generation metrics
         {{ calculate_capacity_factor('net_generation_mwh', 'asset_capacity_mw', 1.0) }} AS capacity_factor,

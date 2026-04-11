@@ -47,7 +47,7 @@ transformed AS (
         EXTRACT(MONTH FROM timestamp) AS month,
         EXTRACT(QUARTER FROM timestamp) AS quarter,
         EXTRACT(YEAR FROM timestamp) AS year,
-        DATE_TRUNC('day', timestamp) AS date,
+        DATE_TRUNC('day', timestamp)::TIMESTAMP_NTZ AS date,
 
         -- Derived weather features
         CASE
