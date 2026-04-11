@@ -157,7 +157,7 @@ def waga_mart_correlation_row_count_check(
     """Verify correlation analysis output has at least MIN_ROW_COUNT rows."""
     return _row_count_check(
         snowflake,
-        "WAGA.ANALYTICS.correlation_analysis",
+        "WAGA.ANALYTICS.correlation_results",
         MIN_ROW_COUNT,
     )
 
