@@ -22,9 +22,13 @@ jobs:
   test:
     name: Run Tests
     runs-on: ubuntu-22.04
+    if: github.event.action != 'closed'
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
@@ -36,6 +40,7 @@ jobs:
 
   dagster_cloud_default_deploy:
     needs: [test]
+    if: always() && (needs.test.result == 'success' || needs.test.result == 'skipped')
     name: Dagster Serverless Deploy
     runs-on: ubuntu-22.04
     outputs:
@@ -57,8 +62,9 @@ jobs:
         if: steps.prerun.outputs.result == 'pex-deploy'
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
           path: project-repo
+          fetch-depth: 1
 
       - name: Set up Python
         if: steps.prerun.outputs.result == 'pex-deploy'
@@ -105,7 +111,8 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          ref: ${{ github.head_ref }}
+          ref: ${{ github.event.pull_request.head.sha }}
+          fetch-depth: 1
       - name: Build and deploy to Dagster Cloud serverless
         uses: dagster-io/dagster-cloud-action/actions/serverless_branch_deploy@v1.12.19
         with:
