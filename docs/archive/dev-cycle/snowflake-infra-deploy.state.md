@@ -2,8 +2,8 @@
 feature: Snowflake Infrastructure & Dagster Cloud Deploy
 slug: snowflake-infra-deploy
 branch: feat/snowflake-infra-deploy
-status: in_progress
-current_phase: implement
+status: completed
+current_phase: pr
 started: 2026-04-05
 ---
 
