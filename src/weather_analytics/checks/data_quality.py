@@ -118,7 +118,7 @@ def waga_raw_weather_row_count_check(
     snowflake: WAGASnowflakeResource,
 ) -> AssetCheckResult:
     """Verify raw weather table has at least MIN_ROW_COUNT rows."""
-    return _row_count_check(snowflake, "WAGA.RAW.raw_weather", MIN_ROW_COUNT)
+    return _row_count_check(snowflake, "WAGA.RAW.weather", MIN_ROW_COUNT)
 
 
 @asset_check(
@@ -129,7 +129,7 @@ def waga_raw_generation_row_count_check(
     snowflake: WAGASnowflakeResource,
 ) -> AssetCheckResult:
     """Verify raw generation table has at least MIN_ROW_COUNT rows."""
-    return _row_count_check(snowflake, "WAGA.RAW.raw_generation", MIN_ROW_COUNT)
+    return _row_count_check(snowflake, "WAGA.RAW.generation", MIN_ROW_COUNT)
 
 
 @asset_check(
