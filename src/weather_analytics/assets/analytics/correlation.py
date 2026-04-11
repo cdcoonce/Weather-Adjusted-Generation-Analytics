@@ -16,7 +16,7 @@ from weather_analytics.lib.polars_utils import (
 from weather_analytics.resources.snowflake import WAGASnowflakeResource
 
 _MIN_ROWS = 10
-_SOURCE_TABLE = "WAGA.MARTS.mart_asset_weather_performance"
+_SOURCE_TABLE = "WAGA.MARTS.mart_asset_performance_daily"
 _TARGET_SCHEMA = "ANALYTICS"
 _TARGET_TABLE = "WAGA.ANALYTICS.correlation_results"
 
@@ -24,7 +24,7 @@ _TARGET_TABLE = "WAGA.ANALYTICS.correlation_results"
 @asset(
     name="waga_correlation_analysis",
     group_name="waga_analytics",
-    deps=["mart_asset_weather_performance"],
+    deps=["mart_asset_performance_daily"],
 )
 def waga_correlation_analysis(
     context: AssetExecutionContext,
@@ -56,6 +56,9 @@ def waga_correlation_analysis(
             query=f"SELECT * FROM {_SOURCE_TABLE}",
             connection=conn,
         )
+        # Snowflake returns UPPERCASE column names; normalize to lowercase
+        # so Polars references match the dbt model definitions.
+        raw_df = raw_df.rename({col: col.lower() for col in raw_df.columns})
 
         if raw_df.shape[0] < _MIN_ROWS:
             raise Failure(
@@ -72,18 +75,21 @@ def waga_correlation_analysis(
         # Static correlation per asset
         corr_lf = calculate_correlation(
             lf,
-            col1="generation_mwh",
-            col2="temperature_c",
+            col1="total_net_generation_mwh",
+            col2="avg_temperature_c",
             partition_by="asset_id",
         )
 
         # Enrich with lag features and rolling stats
         enriched_lf = add_lag_features(
-            lf, column="generation_mwh", lags=[1, 3, 7], partition_by="asset_id"
+            lf,
+            column="total_net_generation_mwh",
+            lags=[1, 3, 7],
+            partition_by="asset_id",
         )
         enriched_lf = add_rolling_stats(
             enriched_lf,
-            column="generation_mwh",
+            column="total_net_generation_mwh",
             window_sizes=[7, 30],
             stats=["mean", "std"],
             partition_by="asset_id",
@@ -103,11 +109,8 @@ def waga_correlation_analysis(
         cursor.execute(f"CREATE SCHEMA IF NOT EXISTS {_TARGET_SCHEMA}")
         _write_polars_to_snowflake(corr_df, _TARGET_TABLE, cursor)
 
-        mean_corr = (
-            corr_df["corr_generation_mwh_temperature_c"].mean()
-            if "corr_generation_mwh_temperature_c" in corr_df.columns
-            else None
-        )
+        corr_col = "corr_total_net_generation_mwh_avg_temperature_c"
+        mean_corr = corr_df[corr_col].mean() if corr_col in corr_df.columns else None
 
         return MaterializeResult(
             metadata={

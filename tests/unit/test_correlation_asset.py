@@ -30,8 +30,8 @@ def test_raises_failure_on_insufficient_rows() -> None:
     small_df = pl.DataFrame(
         {
             "asset_id": ["a"] * 5,
-            "generation_mwh": [1.0] * 5,
-            "temperature_c": [20.0] * 5,
+            "total_net_generation_mwh": [1.0] * 5,
+            "avg_temperature_c": [20.0] * 5,
         }
     )
     mock_resource, _ = _make_mock_snowflake()
@@ -53,8 +53,8 @@ def test_emits_metadata_on_success() -> None:
     df = pl.DataFrame(
         {
             "asset_id": ["a"] * n,
-            "generation_mwh": list(range(n)),
-            "temperature_c": list(range(n)),
+            "total_net_generation_mwh": list(range(n)),
+            "avg_temperature_c": list(range(n)),
         }
     )
     mock_resource, mock_conn = _make_mock_snowflake()
@@ -78,8 +78,8 @@ def test_calls_get_connection() -> None:
     df = pl.DataFrame(
         {
             "asset_id": ["a"] * n,
-            "generation_mwh": list(range(n)),
-            "temperature_c": list(range(n)),
+            "total_net_generation_mwh": list(range(n)),
+            "avg_temperature_c": list(range(n)),
         }
     )
     mock_resource, mock_conn = _make_mock_snowflake()
