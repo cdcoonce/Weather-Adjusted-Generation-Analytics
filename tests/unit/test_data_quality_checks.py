@@ -180,10 +180,11 @@ class TestWeatherValueRangeCheck:
 
     @pytest.mark.unit
     def test_fails_when_violations_exist(self) -> None:
-        mock_sf = _make_mock_snowflake((42,))
+        expected_violations = 42
+        mock_sf = _make_mock_snowflake((expected_violations,))
         result = waga_weather_value_range_check(snowflake=mock_sf)
         assert result.passed is False
-        assert result.metadata["out_of_range_rows"].value == 42
+        assert result.metadata["out_of_range_rows"].value == expected_violations
 
     @pytest.mark.unit
     def test_closes_connection(self) -> None:

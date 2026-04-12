@@ -39,6 +39,8 @@ class TestWAGAConfigDefaults:
 
     @pytest.mark.usefixtures("_required_env")
     def test_default_values(self) -> None:
+        expected_asset_count = 10
+        expected_random_seed = 42
         cfg = _config_no_dotenv()
         assert cfg.snowflake_database == "WAGA"
         assert cfg.snowflake_private_key_path == ""
@@ -46,8 +48,8 @@ class TestWAGAConfigDefaults:
         assert cfg.dlt_dataset_name == "RAW"
         assert cfg.mock_start_date == "2023-01-01"
         assert cfg.mock_end_date == "2024-12-31"
-        assert cfg.mock_asset_count == 10
-        assert cfg.mock_random_seed == 42
+        assert cfg.mock_asset_count == expected_asset_count
+        assert cfg.mock_random_seed == expected_random_seed
         assert cfg.log_level == "INFO"
         assert cfg.log_format == "json"
 

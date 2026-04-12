@@ -74,7 +74,7 @@ def test_file_has_restrictive_permissions() -> None:
 
 @pytest.mark.unit
 def test_idempotent_when_path_already_set(tmp_path: Path) -> None:
-    """_ensure_key_file skips if WAGA_SNOWFLAKE_PRIVATE_KEY_PATH already points to a file."""
+    """Skip work when WAGA_SNOWFLAKE_PRIVATE_KEY_PATH points to a file."""
     existing_file = tmp_path / "existing.p8"
     existing_file.write_text("existing-key")
     os.environ["WAGA_SNOWFLAKE_PRIVATE_KEY_PATH"] = str(existing_file)
@@ -88,7 +88,7 @@ def test_idempotent_when_path_already_set(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_noop_when_no_base64_env_var() -> None:
-    """_ensure_key_file does nothing when WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64 is not set."""
+    """No-op when WAGA_SNOWFLAKE_PRIVATE_KEY_BASE64 is unset."""
     _ensure_key_file()
 
     assert not os.environ.get("WAGA_SNOWFLAKE_PRIVATE_KEY_PATH")
