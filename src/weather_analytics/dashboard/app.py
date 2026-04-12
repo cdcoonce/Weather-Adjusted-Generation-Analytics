@@ -44,12 +44,33 @@ Notes
 
 import json
 import sys
+from datetime import datetime
 from typing import Any
 
 import panel as pn
 from bokeh.io import curdoc
 from bokeh.plotting import figure
 from bokeh.themes import Theme
+
+
+def _parse_iso_date(value: str) -> datetime | None:
+    """Parse an ISO-8601 date string into a midnight ``datetime``.
+
+    Returns ``None`` on failure so the caller can skip bad rows.
+
+    Why ``datetime`` and not ``date``: Bokeh's datetime axis expects
+    ``datetime.datetime`` values (which it converts to milliseconds
+    since epoch). Plain ``datetime.date`` values trigger Bokeh's
+    "could not set initial ranges" warning and the plot renders blank
+    under its title.
+    """
+    if not value:
+        return None
+    try:
+        return datetime.fromisoformat(value)
+    except ValueError:
+        return None
+
 
 _DASHBOARD_TITLE = "Weather-Adjusted Generation Analytics"
 _DASHBOARD_SUBTITLE = (
@@ -63,6 +84,50 @@ _HTTP_ERROR_FLOOR = 400
 
 # Keep in sync with ``weather_analytics.dashboard.theme.DATA_PALETTE``.
 _DATA_PRIMARY = "#353535"
+
+# Inlined portfolio CSS so ``panel convert`` produces a self-contained
+# bundle. Keep this in sync with
+# ``weather_analytics.dashboard.static.portfolio.css``; the full CSS file
+# remains the source of truth for Phase 2+ components and for local
+# development via ``panel serve``.
+_PORTFOLIO_CSS = """
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap");
+
+:root {
+  --color-text-primary: #353535;
+  --color-text-secondary: rgb(85, 85, 85);
+  --color-bg-white: #fff;
+  --color-bg-light: #f9f9f9;
+  --color-border: rgb(53, 53, 53);
+  --color-shadow: rgba(0, 0, 0, 0.1);
+}
+
+body,
+.bk-root,
+.bk,
+.pn-material {
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  color: var(--color-text-primary);
+  background: var(--color-bg-white);
+}
+
+h1, h2, h3, h4 {
+  font-family: "Poppins", sans-serif !important;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin-top: 0;
+}
+
+p {
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+"""
 
 # Keep in sync with ``weather_analytics.dashboard.theme.build_theme_json``.
 _THEME_JSON: dict[str, Any] = {
@@ -166,19 +231,25 @@ def _schema_mismatch_banner(actual_version: str) -> pn.pane.Alert:
 
 
 def _render_tracer_chart(rows: list[dict[str, Any]]) -> Any:
-    """Render the Phase 1 tracer chart: fleet total generation over time."""
+    """Render the Phase 1 tracer chart: fleet total generation over time.
+
+    x-axis values are ``datetime`` (not ``date`` or ``str``) so Bokeh's
+    datetime axis can auto-compute the data range. ``date`` objects and
+    raw strings both trigger Bokeh's ``could not set initial ranges``
+    warning and leave the plot body blank.
+    """
     if not rows:
         return pn.pane.Markdown("_No data available for the current range._")
 
-    totals: dict[str, float] = {}
+    totals: dict[datetime, float] = {}
     for row in rows:
-        date_key = str(row.get("date", ""))
-        if not date_key:
+        parsed = _parse_iso_date(str(row.get("date", "")))
+        if parsed is None:
             continue
         val = row.get("total_net_generation_mwh")
         if val is None:
             continue
-        totals[date_key] = totals.get(date_key, 0.0) + float(val)
+        totals[parsed] = totals.get(parsed, 0.0) + float(val)
 
     if not totals:
         return pn.pane.Markdown("_No generation values found in payload._")
@@ -186,14 +257,16 @@ def _render_tracer_chart(rows: list[dict[str, Any]]) -> Any:
     sorted_dates = sorted(totals.keys())
     sorted_values = [totals[d] for d in sorted_dates]
 
+    # Use explicit width/height rather than stretch modes while
+    # debugging Phase 1 rendering. Switch back to sizing_mode once
+    # the chart is confirmed working in the browser.
     fig = figure(
         title="Fleet Total Net Generation — Daily",
         x_axis_label="Date",
         y_axis_label="MWh",
-        sizing_mode="stretch_width",
-        height=360,
-        tools="",
-        toolbar_location=None,
+        x_axis_type="datetime",
+        width=900,
+        height=400,
     )
     fig.line(
         x=sorted_dates,
@@ -201,7 +274,14 @@ def _render_tracer_chart(rows: list[dict[str, Any]]) -> Any:
         line_color=_DATA_PRIMARY,
         line_width=2,
     )
-    return pn.pane.Bokeh(fig, sizing_mode="stretch_width")
+    fig.scatter(
+        x=sorted_dates,
+        y=sorted_values,
+        size=8,
+        fill_color=_DATA_PRIMARY,
+        line_color=_DATA_PRIMARY,
+    )
+    return pn.pane.Bokeh(fig)
 
 
 async def build_body() -> pn.Column:
@@ -243,9 +323,7 @@ async def build_body() -> pn.Column:
     if not isinstance(daily_raw, list):
         _console_error("daily_performance.json is not a JSON array")
         return pn.Column(
-            _error_banner(
-                "Data format error: daily_performance.json is malformed."
-            ),
+            _error_banner("Data format error: daily_performance.json is malformed."),
             sizing_mode="stretch_width",
         )
 
@@ -263,11 +341,19 @@ async def build_body() -> pn.Column:
 # "file does not publish any Panel contents".
 # ---------------------------------------------------------------------------
 
-pn.extension(sizing_mode="stretch_width")
+pn.extension(sizing_mode="stretch_width", raw_css=[_PORTFOLIO_CSS])
 # Apply the Bokeh theme to the current document so every figure in this
 # app picks it up. ``pn.config.theme`` is for Panel's design system
 # (material/default/dark) and does NOT accept a Bokeh ``Theme`` object.
 curdoc().theme = Theme(json=_THEME_JSON)
 
+# ``pn.bind(build_body)`` makes Panel aware of the async coroutine and
+# renders whatever it returns once the await resolves. Passing the bare
+# function to ``pn.Column`` would leave the body empty because Panel
+# treats it as an opaque non-viewable object.
 _header = pn.pane.Markdown(f"# {_DASHBOARD_TITLE}\n\n{_DASHBOARD_SUBTITLE}")
-pn.Column(_header, build_body, sizing_mode="stretch_width").servable()
+pn.Column(
+    _header,
+    pn.bind(build_body),
+    sizing_mode="stretch_width",
+).servable()
