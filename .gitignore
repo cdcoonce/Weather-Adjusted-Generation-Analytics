@@ -42,6 +42,10 @@ dbt/renewable_dbt/profiles/.user.yml
 data/raw/weather/*.parquet
 data/raw/generation/*.parquet
 
+# Dashboard export + build output (regenerated on every pipeline / CI run)
+dashboard_exports/
+dashboard_build/
+
 # Jupyter
 .ipynb_checkpoints/
 *.ipynb_checkpoints

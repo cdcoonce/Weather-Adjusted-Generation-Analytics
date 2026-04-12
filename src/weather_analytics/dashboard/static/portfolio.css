@@ -1,0 +1,125 @@
+/* WAGA dashboard theme matching charleslikesdata.com.
+ *
+ * Palette and typography copied from the portfolio site's style.css.
+ * Keep in sync with theme.py PORTFOLIO_PALETTE — if one changes, update
+ * the other.
+ */
+
+@import url("https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap");
+
+:root {
+  --color-text-primary: #353535;
+  --color-text-secondary: rgb(85, 85, 85);
+  --color-bg-white: #fff;
+  --color-bg-light: #f9f9f9;
+  --color-bg-card-highlight: rgba(235, 241, 248, 0.4);
+  --color-accent-dark: rgb(53, 53, 53);
+  --color-border: rgb(53, 53, 53);
+  --color-shadow: rgba(0, 0, 0, 0.1);
+  --color-grid: #f0f0f0;
+}
+
+body,
+.bk-root,
+.pn-material,
+.bk {
+  font-family: "Poppins", -apple-system, BlinkMacSystemFont, sans-serif !important;
+  color: var(--color-text-primary);
+  background: var(--color-bg-white);
+}
+
+h1,
+h2,
+h3,
+h4 {
+  font-family: "Poppins", sans-serif !important;
+  font-weight: 600;
+  color: var(--color-text-primary);
+  letter-spacing: -0.01em;
+}
+
+h1 {
+  font-size: 1.75rem;
+  margin-top: 0;
+}
+
+h2 {
+  font-size: 1.25rem;
+}
+
+p {
+  color: var(--color-text-secondary);
+  line-height: 1.6;
+}
+
+/* Panel card styling matches portfolio's project-card style. */
+.pn-card,
+.bk-panel-models-layout-Card {
+  background: var(--color-bg-white);
+  border-radius: 10px;
+  box-shadow: 0 4px 6px var(--color-shadow);
+  border: none;
+  padding: 1rem;
+  transition: box-shadow 300ms ease;
+}
+
+.pn-card:hover,
+.bk-panel-models-layout-Card:hover {
+  box-shadow: 0 8px 12px rgba(0, 0, 0, 0.15);
+}
+
+/* Filter bar styling. */
+.filter-bar {
+  background: var(--color-bg-light);
+  padding: 1rem 2rem;
+  border-radius: 10px;
+  margin-bottom: 1.5rem;
+}
+
+/* KPI card styling. */
+.kpi-card {
+  background: var(--color-bg-card-highlight);
+  border-radius: 8px;
+  padding: 1.5rem;
+  text-align: center;
+}
+
+.kpi-card .value {
+  font-size: 2rem;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.kpi-card .label {
+  font-size: 0.875rem;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+/* Pill-shaped form controls matching portfolio button style. */
+select,
+input[type="text"],
+input[type="date"],
+input[type="number"],
+.bk-input {
+  font-family: "Poppins", sans-serif !important;
+  border: 1px solid var(--color-border);
+  border-radius: 2rem;
+  padding: 0.5rem 1rem;
+  background: var(--color-bg-white);
+  color: var(--color-text-primary);
+}
+
+/* Tab styling. */
+.bk-tabs-header .bk-tab {
+  font-family: "Poppins", sans-serif !important;
+  font-weight: 500;
+  color: var(--color-text-secondary);
+}
+
+.bk-tabs-header .bk-tab.bk-active {
+  color: var(--color-text-primary);
+  border-bottom: 2px solid var(--color-text-primary);
+}
