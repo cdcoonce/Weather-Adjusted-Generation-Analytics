@@ -44,7 +44,7 @@ _CARD_CSS = """
 """
 
 
-def compute_kpis(  # noqa: PLR0913
+def compute_kpis(
     daily_df: pl.DataFrame,
     weather_df: pl.DataFrame,
     asset_id: str,

@@ -78,6 +78,7 @@ ignore = ["ANN101", "ANN102", "D203", "D213"]
     "EM101",
     "EM102",
     "BLE001",   # fetch failures are uniformly converted to a banner
+    "PLR0913",  # filter helpers intentionally take 6 args for clarity
 ]
 # CI utility scripts use print() for user-visible log output.
 "scripts/*" = ["T201", "INP001"]

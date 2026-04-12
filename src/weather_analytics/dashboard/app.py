@@ -37,6 +37,7 @@ from bokeh.io import curdoc
 from bokeh.themes import Theme
 
 from weather_analytics.dashboard.components.filters import Filters
+from weather_analytics.dashboard.components.fleet_view import fleet_panel
 from weather_analytics.dashboard.components.kpi_cards import kpi_row
 from weather_analytics.dashboard.data_loader import (
     EXPECTED_SCHEMA_VERSION,
@@ -305,19 +306,16 @@ async def build_body() -> pn.Column:
 
     # Populate filter state from loaded data.
     _filters.initialize(assets_df, manifest.date_range_start, manifest.date_range_end)
-    # Attach DataFrames so kpi_row reactive closures can read them.
+    # Attach DataFrames so reactive closures can read them.
     _filters._daily_df = daily_df  # type: ignore[attr-defined]
     _filters._weather_df = weather_df  # type: ignore[attr-defined]
+    _filters._assets_df = assets_df  # type: ignore[attr-defined]
 
     filter_bar = _build_filter_bar(_filters)
     kpi = kpi_row(_filters)
 
-    # Tracer chart (Phase 2 carry-forward) — will move into a tab in Phase 4.
-    daily_raw = daily_df.to_dicts()
-    chart = _render_tracer_chart(daily_raw)
-
     tabs = pn.Tabs(
-        ("Generation", chart),
+        ("Fleet Overview", fleet_panel(_filters)),
         sizing_mode="stretch_width",
     )
 
