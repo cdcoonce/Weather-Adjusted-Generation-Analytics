@@ -21,9 +21,6 @@ htmlcov/
 dist/
 build/
 
-# Legacy package (kept during migration, new code lives in src/weather_analytics/)
-# src/  -- removed: src/ is now used for the new weather_analytics package
-
 # Environment
 .env
 .env.local
@@ -41,16 +38,9 @@ dbt/renewable_dbt/dbt_packages/
 dbt/renewable_dbt/logs/
 dbt/renewable_dbt/profiles/.user.yml
 
-# DuckDB
-*.duckdb
-*.duckdb.wal
-
 # Data files (keep structure, ignore contents)
 data/raw/weather/*.parquet
 data/raw/generation/*.parquet
-data/intermediate/**/*.parquet
-data/processed/**/*.parquet
-data/**/*.csv
 
 # Jupyter
 .ipynb_checkpoints/
