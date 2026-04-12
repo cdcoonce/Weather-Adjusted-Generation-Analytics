@@ -32,6 +32,8 @@ _ROOT = Path(__file__).parent.parent
 MODULES_TO_INLINE: list[Path] = [
     _ROOT / "src" / "weather_analytics" / "dashboard" / "theme.py",
     _ROOT / "src" / "weather_analytics" / "dashboard" / "data_loader.py",
+    _ROOT / "src" / "weather_analytics" / "dashboard" / "components" / "filters.py",
+    _ROOT / "src" / "weather_analytics" / "dashboard" / "components" / "kpi_cards.py",
 ]
 _APP_PY = _ROOT / "src" / "weather_analytics" / "dashboard" / "app.py"
 _BUILD_DIR = _ROOT / "dashboard_build"
