@@ -21,6 +21,7 @@ Usage
     uv run python scripts/build_dashboard_app.py
 """
 
+import re
 import subprocess
 import sys
 from pathlib import Path
@@ -164,8 +165,7 @@ def _run_panel_convert(bundle_path: Path) -> None:
         str(_BUILD_DIR),
     ]
     # stdout/stderr inherit from parent process (capture_output=False), so
-    # text=True has no effect here.  Panel also auto-detects ``import polars``
-    # in the bundle and adds it to the Pyodide requirements list automatically.
+    # text=True has no effect here.
     result = subprocess.run(cmd, check=False, capture_output=False)
     if result.returncode != 0:
         print(
@@ -173,6 +173,49 @@ def _run_panel_convert(bundle_path: Path) -> None:
         )
         sys.exit(result.returncode)
     print("[build] panel convert succeeded")
+
+    # Post-process the generated worker JS.  Panel puts 'polars' in the
+    # micropip install list, but polars has no wasm32 wheel on PyPI — it
+    # must be loaded via pyodide.loadPackage() from Pyodide's built-in
+    # package set.  We patch the JS to move polars there.
+    js_out = _BUILD_DIR / (bundle_path.stem + ".js")
+    _patch_worker_js(js_out)
+
+
+def _patch_worker_js(js_path: Path) -> None:
+    """Patch the Pyodide worker JS to load polars via loadPackage.
+
+    Panel adds ``polars`` to the micropip install list, but polars has no
+    wasm32 wheel on PyPI so ``micropip.install("polars")`` fails at runtime.
+    Polars is instead available as a Pyodide built-in package (loadable via
+    ``pyodide.loadPackage``).  This function removes ``polars`` from the
+    micropip list and inserts a ``loadPackage("polars")`` call immediately
+    after the ``loadPackage("micropip")`` call that Panel already emits.
+
+    Parameters
+    ----------
+    js_path : Path
+        Path to the generated ``*.js`` worker file.
+    """
+    if not js_path.exists():
+        print(
+            f"[build] Warning: expected JS output not found at {js_path}",
+            file=sys.stderr,
+        )
+        return
+    text = js_path.read_text(encoding="utf-8")
+    # Remove 'polars' from the env_spec micropip list.
+    text = re.sub(r",\s*'polars'", "", text)
+    text = re.sub(r"'polars',?\s*", "", text)
+    # Add loadPackage("polars") after Panel's loadPackage("micropip") line.
+    old = 'await self.pyodide.loadPackage("micropip");'
+    new = (
+        'await self.pyodide.loadPackage("micropip");\n'
+        '  await self.pyodide.loadPackage("polars");'
+    )
+    text = text.replace(old, new)
+    js_path.write_text(text, encoding="utf-8")
+    print(f"[build] Patched {js_path.name}: polars moved to loadPackage")
 
 
 if __name__ == "__main__":
