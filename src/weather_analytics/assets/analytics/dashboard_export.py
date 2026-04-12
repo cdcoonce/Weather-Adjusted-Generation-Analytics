@@ -330,7 +330,7 @@ def _to_json_records(df: pl.DataFrame) -> list[dict[str, Any]]:
     """
     cleaned = df.fill_nan(None)
     string_cols = [
-        pl.col(c).cast(pl.Utf8) if cleaned[c].dtype == pl.Date else pl.col(c)
+        pl.col(c).cast(pl.Utf8) if cleaned[c].dtype.is_temporal() else pl.col(c)
         for c in cleaned.columns
     ]
     return cleaned.select(string_cols).to_dicts()
