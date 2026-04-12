@@ -11,7 +11,6 @@ Tests exercise the pure data-preparation functions extracted from fleet_view:
 Colour constants are verified against known values.
 """
 
-from __future__ import annotations
 
 from datetime import date, datetime, timedelta
 

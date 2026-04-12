@@ -1,6 +1,5 @@
 """Unit tests for ``weather_analytics.checks.dashboard``."""
 
-from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 

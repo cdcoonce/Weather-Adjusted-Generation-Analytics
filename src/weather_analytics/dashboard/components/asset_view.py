@@ -597,7 +597,11 @@ def asset_panel(filters: Any) -> Any:
             lambda df: _render_expected_vs_actual(df, asset_id),
             message="No expected vs. actual data for the selected filters.",
         )
-        chart2 = _render_rolling_cf(weather_filtered, daily_filtered, asset_id)
+        chart2 = with_empty_guard(
+            weather_filtered,
+            lambda df: _render_rolling_cf(df, daily_filtered, asset_id),
+            message="No capacity factor data for the selected filters.",
+        )
         chart3 = with_empty_guard(
             daily_filtered,
             lambda df: _render_scatter(df, asset_type),

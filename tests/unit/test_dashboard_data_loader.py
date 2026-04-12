@@ -1,6 +1,5 @@
 """Unit tests for ``weather_analytics.dashboard.data_loader``."""
 
-from __future__ import annotations
 
 import asyncio
 import json

@@ -12,7 +12,6 @@ helper functions that drive it. Panel widget rendering is NOT tested here
 - ``filter_assets_by_type()`` pure-function logic
 """
 
-from __future__ import annotations
 
 import polars as pl
 import pytest

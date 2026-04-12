@@ -1,6 +1,5 @@
 """Unit tests for ``weather_analytics.dashboard.theme``."""
 
-from __future__ import annotations
 
 import pytest
 

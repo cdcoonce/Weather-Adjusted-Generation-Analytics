@@ -8,7 +8,6 @@ Tests exercise the pure data-preparation functions extracted from weather_view:
 ``weather_panel`` is smoke-tested only — Panel rendering is not exercised.
 """
 
-from __future__ import annotations
 
 import panel as pn
 import polars as pl

@@ -1,6 +1,5 @@
 """Unit tests for ``scripts.build_dashboard_app`` bundler logic."""
 
-from __future__ import annotations
 
 # The bundler lives in scripts/, which is not a package (no __init__.py).
 # We import the pure helper functions directly using importlib so we don't

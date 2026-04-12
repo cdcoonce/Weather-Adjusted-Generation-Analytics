@@ -8,7 +8,6 @@ Tests exercise the pure utility functions:
 Panel widget construction is tested at the smoke level only.
 """
 
-from __future__ import annotations
 
 import panel as pn
 import polars as pl

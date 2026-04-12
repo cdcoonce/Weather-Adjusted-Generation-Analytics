@@ -13,7 +13,6 @@ Tests exercise the pure data-preparation functions extracted from asset_view:
 ``asset_panel`` is smoke-tested only — Panel rendering is not exercised.
 """
 
-from __future__ import annotations
 
 from datetime import datetime
 

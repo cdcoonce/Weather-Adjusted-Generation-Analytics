@@ -1,6 +1,5 @@
 """Unit tests for ``weather_analytics.assets.analytics.dashboard_export``."""
 
-from __future__ import annotations
 
 import json
 from datetime import date
