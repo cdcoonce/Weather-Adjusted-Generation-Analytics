@@ -32,8 +32,8 @@ jobs:
     runs-on: ubuntu-latest
     env:
       PORTFOLIO_OWNER: ${{ vars.WAGA_PORTFOLIO_REPO_OWNER || 'cdcoonce' }}
-      PORTFOLIO_NAME: ${{ vars.WAGA_PORTFOLIO_REPO_NAME || 'charleslikesdata' }}
-      PORTFOLIO_BRANCH: ${{ vars.WAGA_PORTFOLIO_REPO_BRANCH || 'main' }}
+      PORTFOLIO_NAME: ${{ vars.WAGA_PORTFOLIO_REPO_NAME || 'Portfolio_Website' }}
+      PORTFOLIO_BRANCH: ${{ vars.WAGA_PORTFOLIO_REPO_BRANCH || 'master' }}
       PORTFOLIO_TARGET_DIR: dashboard
     steps:
       - name: Checkout WAGA repo
@@ -47,21 +47,13 @@ jobs:
       - name: Install deps with dashboard extra
         run: uv sync --extra dashboard
 
-      - name: Build Panel app for Pyodide
-        run: |
-          uv run panel convert \
-            src/weather_analytics/dashboard/app.py \
-            --to pyodide-worker \
-            --out dashboard_build/
-
-      - name: Copy portfolio.css into build output
-        run: |
-          cp src/weather_analytics/dashboard/static/portfolio.css dashboard_build/portfolio.css
+      - name: Bundle and build Panel app for Pyodide
+        run: uv run python scripts/build_dashboard_app.py
 
       - name: Smoke-test build artifacts exist
         run: |
           set -euo pipefail
-          for f in index.html app.js portfolio.css; do
+          for f in app_bundled.html app_bundled.js; do
             if [ ! -f "dashboard_build/$f" ]; then
               echo "Missing expected build artifact: $f"
               exit 1
