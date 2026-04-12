@@ -2,8 +2,8 @@
 feature: Weather-Adjusted Generation Analytics Dashboard UI
 slug: dashboard-ui
 branch: feat/dashboard-ui
-status: in_progress
-current_phase: implement
+status: completed
+current_phase: mr
 started: 2026-04-11
 ---
 
@@ -41,3 +41,5 @@ started: 2026-04-11
 - 2026-04-12: Phase 3 implementation complete on `feat/dashboard-ui` (commit 61b4847). `components/filters.py` adds `Filters(param.Parameterized)` with asset_id, asset_type, date_start, date_end params and `_reset_asset_id_on_type_change` watcher. `components/kpi_cards.py` adds `compute_kpis()` pure function and `kpi_row()` Panel reactive row. Bundler `MODULES_TO_INLINE` extended with filters.py and kpi_cards.py. app.py wired to show filter bar → KPI row → tabs. 168 unit tests passing (34 new), ruff clean. Known limitation: `asset_type` filter is silently no-op on daily_df (no `asset_type` column in daily_performance.json) — will be resolved in Phase 4 via assets join.
 - 2026-04-12: Phase 4 implementation complete on `feat/dashboard-ui` (commit e80e2de). `components/_chart_helpers.py` adds `make_themed_figure`, `with_empty_guard`, `style_tooltip`. `components/fleet_view.py` adds `fleet_panel` with three reactive charts (generation-over-time lines, capacity factor hbars, performance score heatmap). All charts join with `assets_df` on `asset_id` to resolve `asset_type` for Wind/Solar coloring — fixes Phase 3 asset_type filter limitation. Bundler extended; app.py Fleet Overview tab wired. 218 unit tests passing (50 new), ruff clean, bundle builds.
 - 2026-04-12: Phase 5 implementation complete on `feat/dashboard-ui` (commit 89ad01f). `components/asset_view.py` adds `asset_panel` with four reactive charts: expected-vs-actual generation lines, rolling CF 7d/30d, wind/solar scatter with numpy linear regression and r², performance distribution vbar_stack. Shows Markdown placeholder when asset_id is "All". Bundler extended; Asset Deep-Dive tab wired as second tab. 253 unit tests passing (35 new), ruff clean, bundle builds.
+- 2026-04-12: Phase 6 implementation complete on `feat/dashboard-ui` (commit 561af09). `components/weather_view.py` adds `weather_panel` with three reactive charts: R² grouped bars per asset, wind speed vs. generation scatter (wind assets), GHI vs. generation scatter (solar assets). 280 unit tests passing (27 new), ruff clean, bundle builds.
+- 2026-04-12: Code review complete. 3 blocking issues fixed (commit 1eb186a): chart2 in asset_view wrapped in with_empty_guard; `from __future__ import annotations` removed from 11 new test files. PR opened: [#27](https://github.com/cdcoonce/Weather-Adjusted-Generation-Analytics/pull/27) (Closes #20–#26). Status: completed.
