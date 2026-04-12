@@ -185,12 +185,19 @@ def _run_panel_convert(bundle_path: Path) -> None:
 def _patch_worker_js(js_path: Path) -> None:
     """Patch the Pyodide worker JS to load polars via loadPackage.
 
-    Panel adds ``polars`` to the micropip install list, but polars has no
-    wasm32 wheel on PyPI so ``micropip.install("polars")`` fails at runtime.
-    Polars is instead available as a Pyodide built-in package (loadable via
-    ``pyodide.loadPackage``).  This function removes ``polars`` from the
-    micropip list and inserts a ``loadPackage("polars")`` call immediately
-    after the ``loadPackage("micropip")`` call that Panel already emits.
+    Panel 1.4.x targets Pyodide v0.25.0, which does NOT ship polars in its
+    built-in package set (polars was added in Pyodide v0.26.0).  This
+    function applies two patches:
+
+    1. Upgrades the Pyodide CDN import from v0.25.0 → v0.26.0.  Both Panel
+       and Bokeh wheels are ``py3-none-any`` (pure Python), so they run on
+       either CPython 3.11 (0.25) or 3.12 (0.26) without recompilation.
+
+    2. Removes ``polars`` from the micropip env_spec list (Panel puts it
+       there, but no wasm32 wheel exists on PyPI) and inserts a
+       ``loadPackage("polars")`` call immediately after the
+       ``loadPackage("micropip")`` call that Panel already emits, so polars
+       is loaded from Pyodide's built-in package set.
 
     Parameters
     ----------
@@ -204,6 +211,11 @@ def _patch_worker_js(js_path: Path) -> None:
         )
         return
     text = js_path.read_text(encoding="utf-8")
+    # Upgrade Pyodide from v0.25.0 (no polars) to v0.26.0 (polars built-in).
+    text = text.replace(
+        "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js",
+        "https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.js",
+    )
     # Remove 'polars' from the env_spec micropip list.
     text = re.sub(r",\s*'polars'", "", text)
     text = re.sub(r"'polars',?\s*", "", text)
@@ -215,7 +227,7 @@ def _patch_worker_js(js_path: Path) -> None:
     )
     text = text.replace(old, new)
     js_path.write_text(text, encoding="utf-8")
-    print(f"[build] Patched {js_path.name}: polars moved to loadPackage")
+    print(f"[build] Patched {js_path.name}: Pyodide→v0.26.0, polars→loadPackage")
 
 
 if __name__ == "__main__":
