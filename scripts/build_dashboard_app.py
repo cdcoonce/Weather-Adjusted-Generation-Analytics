@@ -41,6 +41,7 @@ MODULES_TO_INLINE: list[Path] = [
     / "components"
     / "_chart_helpers.py",
     _ROOT / "src" / "weather_analytics" / "dashboard" / "components" / "fleet_view.py",
+    _ROOT / "src" / "weather_analytics" / "dashboard" / "components" / "asset_view.py",
 ]
 _APP_PY = _ROOT / "src" / "weather_analytics" / "dashboard" / "app.py"
 _BUILD_DIR = _ROOT / "dashboard_build"

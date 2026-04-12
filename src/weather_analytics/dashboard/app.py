@@ -36,6 +36,7 @@ import panel as pn
 from bokeh.io import curdoc
 from bokeh.themes import Theme
 
+from weather_analytics.dashboard.components.asset_view import asset_panel
 from weather_analytics.dashboard.components.filters import Filters
 from weather_analytics.dashboard.components.fleet_view import fleet_panel
 from weather_analytics.dashboard.components.kpi_cards import kpi_row
@@ -316,6 +317,7 @@ async def build_body() -> pn.Column:
 
     tabs = pn.Tabs(
         ("Fleet Overview", fleet_panel(_filters)),
+        ("Asset Deep-Dive", asset_panel(_filters)),
         sizing_mode="stretch_width",
     )
 
