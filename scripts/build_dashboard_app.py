@@ -186,7 +186,7 @@ def _patch_worker_js(js_path: Path) -> None:
     """Patch the Pyodide worker JS to load polars via loadPackage.
 
     Panel 1.4.x targets Pyodide v0.25.0, which does NOT ship polars in its
-    built-in package set (polars was added in Pyodide v0.26.0).  This
+    built-in package set (polars was added in Pyodide v0.27.0).  This
     function applies two patches:
 
     1. Upgrades the Pyodide CDN import from v0.25.0 → v0.26.0.  Both Panel
@@ -211,14 +211,15 @@ def _patch_worker_js(js_path: Path) -> None:
         )
         return
     text = js_path.read_text(encoding="utf-8")
-    # Upgrade Pyodide from v0.25.0 (no polars) to v0.26.0 (polars built-in).
+    # Upgrade Pyodide from v0.25.0 (no polars) to v0.27.0 (polars built-in).
     text = text.replace(
         "https://cdn.jsdelivr.net/pyodide/v0.25.0/full/pyodide.js",
-        "https://cdn.jsdelivr.net/pyodide/v0.26.0/full/pyodide.js",
+        "https://cdn.jsdelivr.net/pyodide/v0.27.0/full/pyodide.js",
     )
-    # Remove 'polars' from the env_spec micropip list.
+    # Remove 'polars' from the env_spec micropip list (polars has no wasm32
+    # wheel on PyPI; it must come from Pyodide's built-in package set).
     text = re.sub(r",\s*'polars'", "", text)
-    text = re.sub(r"'polars',?\s*", "", text)
+    text = re.sub(r"'polars',\s*", "", text)
     # Add loadPackage("polars") after Panel's loadPackage("micropip") line.
     old = 'await self.pyodide.loadPackage("micropip");'
     new = (
@@ -227,7 +228,7 @@ def _patch_worker_js(js_path: Path) -> None:
     )
     text = text.replace(old, new)
     js_path.write_text(text, encoding="utf-8")
-    print(f"[build] Patched {js_path.name}: Pyodide→v0.26.0, polars→loadPackage")
+    print(f"[build] Patched {js_path.name}: Pyodide→v0.27.0, polars→loadPackage")
 
 
 if __name__ == "__main__":
