@@ -13,18 +13,25 @@ from dagster import AssetKey, Failure, build_asset_context
 from github.GithubException import GithubException
 
 from weather_analytics.assets.analytics.dashboard_export import (
+    _ASSETS_FILE,
+    _DAILY_PERFORMANCE_COLUMNS,
     _DAILY_PERFORMANCE_FILE,
-    _EXPORT_DIR,
+    _MANIFEST_FILE,
     _MIN_ROWS,
-    _PHASE1_COLUMNS,
+    _WEATHER_PERFORMANCE_COLUMNS,
+    _WEATHER_PERFORMANCE_FILE,
     _to_json_records,
     waga_dashboard_export_build,
     waga_dashboard_export_publish,
 )
 
+# _ASSET_DIM_COLUMNS was removed in Phase 2 — asset dim is built by joining
+# both marts.  Tests use the concrete mart column names instead.
+
 _EXPECTED_NAN_ROWS = 2
 _HTTP_FORBIDDEN = 403
 _HTTP_NOT_FOUND = 404
+_EXPECTED_FILE_COUNT = 4
 
 
 def _make_mock_snowflake() -> tuple[MagicMock, MagicMock]:
@@ -35,14 +42,53 @@ def _make_mock_snowflake() -> tuple[MagicMock, MagicMock]:
 
 
 def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
-    """Return a mart-shaped DataFrame with uppercase columns like Snowflake."""
+    """Return a daily-mart-shaped DataFrame with uppercase columns like Snowflake.
+
+    Column names match the real ``mart_asset_performance_daily`` schema:
+    ``ASSET_CAPACITY_MW`` and ``ASSET_SIZE_CATEGORY`` (not the shorter names
+    that the data contract exports use after renaming).
+    """
     return pl.DataFrame(
         {
             "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
             "DATE": [f"2026-04-{(i % 28) + 1:02d}" for i in range(rows)],
             "TOTAL_NET_GENERATION_MWH": [100.0 + i for i in range(rows)],
             "DAILY_CAPACITY_FACTOR": [0.4 for _ in range(rows)],
+            "AVG_AVAILABILITY_PCT": [98.0 for _ in range(rows)],
+            "TOTAL_CURTAILMENT_MWH": [0.0 for _ in range(rows)],
+            "DAILY_PERFORMANCE_RATING": ["good" for _ in range(rows)],
+            "EXCELLENT_HOURS": [4 for _ in range(rows)],
+            "GOOD_HOURS": [10 for _ in range(rows)],
+            "FAIR_HOURS": [6 for _ in range(rows)],
+            "POOR_HOURS": [4 for _ in range(rows)],
+            "AVG_WIND_SPEED_MPS": [7.2 for _ in range(rows)],
+            "AVG_GHI": [450.0 for _ in range(rows)],
+            "AVG_TEMPERATURE_C": [18.5 for _ in range(rows)],
+            "DATA_COMPLETENESS_PCT": [100.0 for _ in range(rows)],
+            # Real mart column names (not the renamed data-contract names):
+            "ASSET_CAPACITY_MW": [50.0 for _ in range(rows)],
+            "ASSET_SIZE_CATEGORY": ["medium" for _ in range(rows)],
             "UNUSED_COLUMN": ["noise"] * rows,
+        }
+    )
+
+
+def _make_valid_weather_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
+    """Return a weather-mart-shaped DataFrame with uppercase columns like Snowflake."""
+    return pl.DataFrame(
+        {
+            "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
+            "DATE": [f"2026-04-{(i % 28) + 1:02d}" for i in range(rows)],
+            "PERFORMANCE_SCORE": [0.85 for _ in range(rows)],
+            "PERFORMANCE_CATEGORY": ["good" for _ in range(rows)],
+            "AVG_EXPECTED_GENERATION_MWH": [100.0 for _ in range(rows)],
+            "AVG_ACTUAL_GENERATION_MWH": [85.0 for _ in range(rows)],
+            "AVG_PERFORMANCE_RATIO_PCT": [85.0 for _ in range(rows)],
+            "WIND_R_SQUARED": [0.92 for _ in range(rows)],
+            "SOLAR_R_SQUARED": [0.0 for _ in range(rows)],
+            "INFERRED_ASSET_TYPE": ["wind" for _ in range(rows)],
+            "ROLLING_7D_AVG_CF": [0.40 for _ in range(rows)],
+            "ROLLING_30D_AVG_CF": [0.38 for _ in range(rows)],
         }
     )
 
@@ -82,21 +128,22 @@ def test_build_raises_failure_on_insufficient_rows(tmp_path: Path) -> None:
 
 @pytest.mark.unit
 def test_build_raises_failure_on_missing_column(tmp_path: Path) -> None:
-    """If the mart doesn't have the columns we need, fail loudly."""
+    """If the daily mart doesn't have the columns we need, fail loudly."""
     bad_df = pl.DataFrame(
         {
             "ASSET_ID": ["a"] * (_MIN_ROWS + 1),
             "DATE": ["2026-01-01"] * (_MIN_ROWS + 1),
-            # Missing TOTAL_NET_GENERATION_MWH and DAILY_CAPACITY_FACTOR
+            # Missing required columns
         }
     )
+    weather_df = _make_valid_weather_mart_df()
     mock_resource, _ = _make_mock_snowflake()
     context = build_asset_context()
 
     with (
         patch(
             "weather_analytics.assets.analytics.dashboard_export.pl.read_database",
-            return_value=bad_df,
+            side_effect=[bad_df, weather_df],
         ),
         patch(
             "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
@@ -108,16 +155,39 @@ def test_build_raises_failure_on_missing_column(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_build_writes_json_and_lowercases_columns(tmp_path: Path) -> None:
-    """Happy path: write JSON, emit metadata, lowercase columns, project."""
+def test_build_raises_failure_if_weather_mart_empty(tmp_path: Path) -> None:
+    """If the weather mart has too few rows, fail with Failure."""
+    daily_df = _make_valid_mart_df()
+    small_weather_df = _make_valid_weather_mart_df(rows=3)
+    mock_resource, _ = _make_mock_snowflake()
+    context = build_asset_context()
+
+    with (
+        patch(
+            "weather_analytics.assets.analytics.dashboard_export.pl.read_database",
+            side_effect=[daily_df, small_weather_df],
+        ),
+        patch(
+            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
+            tmp_path / "exports",
+        ),
+        pytest.raises(Failure, match="need at least"),
+    ):
+        waga_dashboard_export_build(context=context, snowflake=mock_resource)
+
+
+@pytest.mark.unit
+def test_build_writes_all_four_files(tmp_path: Path) -> None:
+    """Happy path: write 4 JSON files, emit metadata, lowercase columns, project."""
     export_dir = tmp_path / "exports"
-    df = _make_valid_mart_df()
+    daily_df = _make_valid_mart_df()
+    weather_df = _make_valid_weather_mart_df()
     mock_resource, mock_conn = _make_mock_snowflake()
 
     with (
         patch(
             "weather_analytics.assets.analytics.dashboard_export.pl.read_database",
-            return_value=df,
+            side_effect=[daily_df, weather_df],
         ),
         patch(
             "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
@@ -127,25 +197,47 @@ def test_build_writes_json_and_lowercases_columns(tmp_path: Path) -> None:
         context = build_asset_context()
         result = waga_dashboard_export_build(context=context, snowflake=mock_resource)
 
-    # Metadata
+    # Metadata has all 4 file sizes
     assert result.metadata is not None
-    assert result.metadata["row_count"] == df.shape[0]
-    assert result.metadata["column_count"] == len(_PHASE1_COLUMNS)
-    assert result.metadata["byte_size"] > 0
+    assert result.metadata["daily_performance_bytes"] > 0
+    assert result.metadata["weather_performance_bytes"] > 0
+    assert result.metadata["assets_bytes"] > 0
+    assert result.metadata["manifest_bytes"] > 0
     assert result.metadata["schema_version"] == "1.0"
 
-    # File was written
-    output_path = export_dir / _DAILY_PERFORMANCE_FILE
-    assert output_path.exists()
+    # All 4 files were written
+    assert (export_dir / _DAILY_PERFORMANCE_FILE).exists()
+    assert (export_dir / _WEATHER_PERFORMANCE_FILE).exists()
+    assert (export_dir / _ASSETS_FILE).exists()
+    assert (export_dir / _MANIFEST_FILE).exists()
 
-    # File is valid JSON, has correct lowercase columns, and is projected
-    records = json.loads(output_path.read_text())
-    assert isinstance(records, list)
-    assert len(records) == df.shape[0]
-    first = records[0]
-    assert set(first.keys()) == set(_PHASE1_COLUMNS)  # projected
-    assert "unused_column" not in first  # dropped
-    assert "UNUSED_COLUMN" not in first  # case-normalized and dropped
+    # daily_performance.json has correct lowercase columns, projected
+    daily_records = json.loads((export_dir / _DAILY_PERFORMANCE_FILE).read_text())
+    assert isinstance(daily_records, list)
+    assert len(daily_records) == daily_df.shape[0]
+    first_daily = daily_records[0]
+    assert set(first_daily.keys()) == set(_DAILY_PERFORMANCE_COLUMNS)
+    assert "unused_column" not in first_daily
+
+    # weather_performance.json has correct lowercase columns
+    weather_records = json.loads((export_dir / _WEATHER_PERFORMANCE_FILE).read_text())
+    assert isinstance(weather_records, list)
+    first_weather = weather_records[0]
+    assert set(first_weather.keys()) == set(_WEATHER_PERFORMANCE_COLUMNS)
+
+    # assets.json has display_name computed
+    assets_records = json.loads((export_dir / _ASSETS_FILE).read_text())
+    assert isinstance(assets_records, list)
+    assert all("display_name" in r for r in assets_records)
+
+    # manifest.json is valid JSON with expected keys
+    manifest = json.loads((export_dir / _MANIFEST_FILE).read_text())
+    assert "generated_at" in manifest
+    assert "date_range" in manifest
+    assert "asset_count" in manifest
+    assert "row_counts" in manifest
+    assert manifest["schema_version"] == "1.0"
+
     # Connection closed
     mock_conn.close.assert_called_once()
 
@@ -192,6 +284,33 @@ def _make_mock_portfolio_repo() -> MagicMock:
     return mock_repo_resource
 
 
+def _make_mock_repo_with_git_trees() -> MagicMock:
+    """Return a mock GitHub repo pre-configured for Git Trees API calls."""
+    mock_repo = MagicMock()
+    mock_ref = MagicMock()
+    mock_ref.object.sha = "head-sha"
+    mock_repo.get_git_ref.return_value = mock_ref
+    mock_head_commit = MagicMock()
+    mock_head_commit.tree = MagicMock()
+    mock_repo.get_git_commit.return_value = mock_head_commit
+    mock_blob = MagicMock()
+    mock_blob.sha = "blob-sha"
+    mock_repo.create_git_blob.return_value = mock_blob
+    mock_repo.create_git_tree.return_value = MagicMock()
+    mock_new_commit = MagicMock()
+    mock_new_commit.sha = "new-commit-sha"
+    mock_repo.create_git_commit.return_value = mock_new_commit
+    return mock_repo
+
+
+def _write_all_four_files(exports: Path) -> None:
+    """Write the 4 expected export files to a tmp exports directory."""
+    (exports / _DAILY_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
+    (exports / _WEATHER_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
+    (exports / _ASSETS_FILE).write_text('[{"asset_id": "a"}]')
+    (exports / _MANIFEST_FILE).write_text('{"schema_version": "1.0"}')
+
+
 @pytest.mark.unit
 def test_publish_raises_failure_when_local_file_missing(
     tmp_path: Path,
@@ -207,7 +326,7 @@ def test_publish_raises_failure_when_local_file_missing(
             "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
             empty_exports,
         ),
-        pytest.raises(Failure, match="missing"),
+        pytest.raises(Failure, match=r"(?i)missing"),
     ):
         waga_dashboard_export_publish(
             context=context, portfolio_repo=mock_repo_resource
@@ -215,102 +334,55 @@ def test_publish_raises_failure_when_local_file_missing(
 
 
 @pytest.mark.unit
-def test_publish_creates_new_file_when_not_present(tmp_path: Path) -> None:
-    """When remote file doesn't exist yet, use create_file (not update)."""
+def test_publish_single_commit_for_all_four_files(tmp_path: Path) -> None:
+    """Git Trees API: one commit, 4 blobs, ref updated with new SHA."""
     exports = tmp_path / "exports"
     exports.mkdir()
-    (exports / _DAILY_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
+    _write_all_four_files(exports)
 
     mock_repo_resource = _make_mock_portfolio_repo()
+    mock_repo = _make_mock_repo_with_git_trees()
+    mock_gh = MagicMock()
+    mock_gh.get_repo.return_value = mock_repo
 
-    mock_repo = MagicMock()
-    mock_repo.get_contents.side_effect = GithubException(
-        status=_HTTP_NOT_FOUND, data={}
+    with (
+        patch(
+            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
+            exports,
+        ),
+        patch(
+            "weather_analytics.assets.analytics.dashboard_export.Github",
+            return_value=mock_gh,
+            create=True,
+        ),
+    ):
+        context = build_asset_context()
+        result = waga_dashboard_export_publish(
+            context=context, portfolio_repo=mock_repo_resource
+        )
+
+    # Single commit
+    mock_repo.create_git_commit.assert_called_once()
+    # one blob per file
+    assert mock_repo.create_git_blob.call_count == _EXPECTED_FILE_COUNT
+    # ref updated with the new commit SHA
+    mock_repo.get_git_ref.return_value.edit.assert_called_once_with(
+        sha="new-commit-sha"
     )
-    mock_repo.create_file.return_value = {
-        "content": MagicMock(sha="abc123"),
-        "commit": MagicMock(sha="deadbeef"),
-    }
-    mock_gh = MagicMock()
-    mock_gh.get_repo.return_value = mock_repo
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            exports,
-        ),
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export.Github",
-            return_value=mock_gh,
-            create=True,
-        ),
-    ):
-        context = build_asset_context()
-        result = waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-    assert mock_repo.create_file.called
-    assert not mock_repo.update_file.called
     assert result.metadata is not None
-    assert result.metadata["commit_sha"] == "deadbeef"
-
-
-@pytest.mark.unit
-def test_publish_updates_existing_file(tmp_path: Path) -> None:
-    """When remote file exists, use update_file with its SHA."""
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    (exports / _DAILY_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
-
-    mock_repo_resource = _make_mock_portfolio_repo()
-
-    mock_existing = MagicMock()
-    mock_existing.sha = "existing-sha"
-    mock_repo = MagicMock()
-    mock_repo.get_contents.return_value = mock_existing
-    mock_repo.update_file.return_value = {
-        "content": MagicMock(sha="new-sha"),
-        "commit": MagicMock(sha="deadbeef2"),
-    }
-    mock_gh = MagicMock()
-    mock_gh.get_repo.return_value = mock_repo
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            exports,
-        ),
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export.Github",
-            return_value=mock_gh,
-            create=True,
-        ),
-    ):
-        context = build_asset_context()
-        result = waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-    mock_repo.update_file.assert_called_once()
-    update_kwargs = mock_repo.update_file.call_args.kwargs
-    assert update_kwargs["sha"] == "existing-sha"
-    assert result.metadata["commit_sha"] == "deadbeef2"
+    assert result.metadata["commit_sha"] == "new-commit-sha"
 
 
 @pytest.mark.unit
 def test_publish_raises_failure_on_api_error(tmp_path: Path) -> None:
-    """Non-404 GitHub errors must raise Failure (no silent success)."""
+    """get_git_ref raising GithubException must raise Failure."""
     exports = tmp_path / "exports"
     exports.mkdir()
-    (exports / _DAILY_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
+    _write_all_four_files(exports)
 
     mock_repo_resource = _make_mock_portfolio_repo()
-
     mock_repo = MagicMock()
-    mock_repo.get_contents.side_effect = GithubException(
-        status=_HTTP_FORBIDDEN, data={}
-    )
+    mock_repo.get_git_ref.side_effect = GithubException(status=500, data={})
     mock_gh = MagicMock()
     mock_gh.get_repo.return_value = mock_repo
     context = build_asset_context()
@@ -325,7 +397,7 @@ def test_publish_raises_failure_on_api_error(tmp_path: Path) -> None:
             return_value=mock_gh,
             create=True,
         ),
-        pytest.raises(Failure, match="HTTP 403"),
+        pytest.raises(Failure, match="HTTP 500"),
     ):
         waga_dashboard_export_publish(
             context=context, portfolio_repo=mock_repo_resource
@@ -333,12 +405,11 @@ def test_publish_raises_failure_on_api_error(tmp_path: Path) -> None:
 
 
 @pytest.mark.unit
-def test_publish_raises_failure_on_repo_not_found() -> None:
+def test_publish_raises_failure_on_repo_not_found(tmp_path: Path) -> None:
     """If the PAT can't access the repo at all, fail with a clear message."""
-    # Use the actual _EXPORT_DIR so we reach the auth step, but ensure the
-    # file exists so we don't short-circuit on the missing-file guard.
-    _EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-    (_EXPORT_DIR / _DAILY_PERFORMANCE_FILE).write_text("[]")
+    exports = tmp_path / "exports"
+    exports.mkdir()
+    _write_all_four_files(exports)
 
     mock_repo_resource = _make_mock_portfolio_repo()
     mock_gh = MagicMock()
@@ -346,6 +417,10 @@ def test_publish_raises_failure_on_repo_not_found() -> None:
     context = build_asset_context()
 
     with (
+        patch(
+            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
+            exports,
+        ),
         patch(
             "weather_analytics.assets.analytics.dashboard_export.Github",
             return_value=mock_gh,

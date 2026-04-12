@@ -164,3 +164,15 @@ async def load_daily_performance(base: str = DEFAULT_DATA_BASE) -> pl.DataFrame:
     """Load ``daily_performance.json`` as a Polars DataFrame."""
     raw = await load_json("daily_performance.json", base=base)
     return pl.DataFrame(raw)
+
+
+async def load_assets(base: str = DEFAULT_DATA_BASE) -> pl.DataFrame:
+    """Load ``assets.json`` as a Polars DataFrame."""
+    raw = await load_json("assets.json", base=base)
+    return pl.DataFrame(raw)
+
+
+async def load_weather_performance(base: str = DEFAULT_DATA_BASE) -> pl.DataFrame:
+    """Load ``weather_performance.json`` as a Polars DataFrame."""
+    raw = await load_json("weather_performance.json", base=base)
+    return pl.DataFrame(raw)

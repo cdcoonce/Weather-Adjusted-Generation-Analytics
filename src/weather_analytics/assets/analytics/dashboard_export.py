@@ -6,12 +6,11 @@ Two assets are defined here, split for clean separation of concerns:
   names (matching ``correlation.py:60-61``), projects to the UI subset, and
   writes JSON files to a local directory.
 - ``waga_dashboard_export_publish`` reads the local JSON files and pushes
-  them to the portfolio repo via the GitHub Contents API. Retries twice
-  with a 60-second delay.
+  them to the portfolio repo via the GitHub Git Trees API in a single commit.
 
 Phase 1 builds a minimal tracer bullet: one JSON file with a small column
 subset. Phase 2 expands the projection to the full 15-column subset and
-adds the other three JSON files.
+adds the other three JSON files using the Git Trees API for a single commit.
 
 PyGithub debug logging is never enabled — that would leak the PAT in
 request headers. Do not change this.
@@ -26,13 +25,14 @@ from typing import Any
 import polars as pl
 from dagster import (
     AssetExecutionContext,
+    DagsterError,
     Failure,
     MaterializeResult,
     MetadataValue,
     RetryPolicy,
     asset,
 )
-from github import Github
+from github import Github, InputGitTreeElement
 from github.GithubException import GithubException
 
 from weather_analytics.resources.portfolio_repo import PortfolioRepoResource
@@ -40,12 +40,7 @@ from weather_analytics.resources.snowflake import WAGASnowflakeResource
 
 
 def _refresh_timestamp() -> str:
-    """Return an ISO 8601 UTC timestamp suffix for commit messages.
-
-    Using a timestamp rather than ``context.run.run_id`` avoids a Dagster
-    testing quirk: ``context.run.run_id`` is unavailable when an asset is
-    invoked directly via ``build_asset_context()``.
-    """
+    """Return an ISO 8601 UTC timestamp suffix for commit messages."""
     return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
@@ -55,20 +50,60 @@ def _refresh_timestamp() -> str:
 
 _MIN_ROWS = 10
 _SOURCE_MART = "WAGA.MARTS.mart_asset_performance_daily"
+_WEATHER_MART = "WAGA.MARTS.mart_asset_weather_performance"
 _EXPORT_DIR = Path("dashboard_exports")
 _SCHEMA_VERSION = "1.0"
 _HTTP_NOT_FOUND = 404
 
-# Phase 1 uses a minimal column subset as the tracer bullet. Phase 2 expands
-# to the full 15-column contract specified in the design spec.
-_PHASE1_COLUMNS: tuple[str, ...] = (
+_DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "asset_id",
     "date",
     "total_net_generation_mwh",
     "daily_capacity_factor",
+    "avg_availability_pct",
+    "total_curtailment_mwh",
+    "daily_performance_rating",
+    "excellent_hours",
+    "good_hours",
+    "fair_hours",
+    "poor_hours",
+    "avg_wind_speed_mps",
+    "avg_ghi",
+    "avg_temperature_c",
+    "data_completeness_pct",
+)
+
+_WEATHER_PERFORMANCE_COLUMNS: tuple[str, ...] = (
+    "asset_id",
+    "date",
+    "performance_score",
+    "performance_category",
+    "avg_expected_generation_mwh",
+    "avg_actual_generation_mwh",
+    "avg_performance_ratio_pct",
+    "wind_r_squared",
+    "solar_r_squared",
+    "inferred_asset_type",
+    "rolling_7d_avg_cf",
+    "rolling_30d_avg_cf",
+)
+
+# Mart column names for the asset dimension.
+# ``asset_capacity_mw`` and ``asset_size_category`` come from
+# ``mart_asset_performance_daily``; ``inferred_asset_type`` comes from
+# ``mart_asset_weather_performance``.  They are joined and renamed to the
+# data-contract names (``capacity_mw``, ``size_category``, ``asset_type``)
+# during assets_df construction below.
+_DAILY_ASSET_DIM_COLUMNS: tuple[str, ...] = (
+    "asset_id",
+    "asset_capacity_mw",
+    "asset_size_category",
 )
 
 _DAILY_PERFORMANCE_FILE = "daily_performance.json"
+_WEATHER_PERFORMANCE_FILE = "weather_performance.json"
+_ASSETS_FILE = "assets.json"
+_MANIFEST_FILE = "manifest.json"
 _REPO_DATA_DIR = "dashboard/data"
 
 
@@ -80,13 +115,13 @@ _REPO_DATA_DIR = "dashboard/data"
 @asset(
     name="waga_dashboard_export_build",
     group_name="dashboard",
-    deps=["mart_asset_performance_daily"],
+    deps=["mart_asset_performance_daily", "mart_asset_weather_performance"],
 )
 def waga_dashboard_export_build(
     context: AssetExecutionContext,
     snowflake: WAGASnowflakeResource,
 ) -> MaterializeResult:
-    """Query mart, project columns, write JSON files locally.
+    """Query marts, project columns, write JSON files locally.
 
     Downstream assets (``waga_dashboard_export_publish``) read the local
     files and push them to the portfolio repo.
@@ -101,84 +136,176 @@ def waga_dashboard_export_build(
     Returns
     -------
     MaterializeResult
-        Metadata including row count, byte sizes, and output paths.
+        Metadata including row counts, byte sizes, and output paths.
 
     Raises
     ------
     dagster.Failure
-        If the source mart has fewer than ``_MIN_ROWS`` rows. Prevents
-        publishing an empty-looking dashboard (matches
-        ``correlation.py:63-69`` pattern).
+        If either source mart has fewer than ``_MIN_ROWS`` rows, or if
+        required columns are missing.
     """
     conn = snowflake.get_connection()
     try:
+        # --- Query daily performance mart ---
         query_start = time.monotonic()
-        raw_df = pl.read_database(
+        raw_daily = pl.read_database(
             query=f"SELECT * FROM {_SOURCE_MART}",
             connection=conn,
         )
-        # Snowflake returns UPPERCASE columns; normalize to match dbt
-        # model definitions (see correlation.py:60-61).
-        raw_df = raw_df.rename({col: col.lower() for col in raw_df.columns})
+        raw_daily = raw_daily.rename({col: col.lower() for col in raw_daily.columns})
         query_ms = (time.monotonic() - query_start) * 1000
         context.log.info(
-            "Snowflake query completed in %.0fms (%d rows)",
+            "Daily mart query completed in %.0fms (%d rows)",
             query_ms,
-            raw_df.shape[0],
+            raw_daily.shape[0],
         )
 
-        if raw_df.shape[0] < _MIN_ROWS:
+        if raw_daily.shape[0] < _MIN_ROWS:
             raise Failure(
                 description=(
-                    f"Source mart {_SOURCE_MART} has {raw_df.shape[0]} rows, "
+                    f"Source mart {_SOURCE_MART} has {raw_daily.shape[0]} rows, "
                     f"need at least {_MIN_ROWS}. Refusing to publish a "
                     f"broken-looking dashboard."
                 ),
             )
 
-        # Project to the Phase 1 column subset.
-        project_start = time.monotonic()
-        missing = [c for c in _PHASE1_COLUMNS if c not in raw_df.columns]
-        if missing:
+        missing_daily = [
+            c for c in _DAILY_PERFORMANCE_COLUMNS if c not in raw_daily.columns
+        ]
+        if missing_daily:
             raise Failure(
                 description=(
                     f"Mart {_SOURCE_MART} is missing expected columns: "
-                    f"{missing}. Check dbt model schema."
+                    f"{missing_daily}. Check dbt model schema."
                 ),
             )
-        projected = raw_df.select(_PHASE1_COLUMNS)
-        project_ms = (time.monotonic() - project_start) * 1000
-        context.log.info("Column projection completed in %.0fms", project_ms)
 
-        # Serialize to JSON-friendly records.
-        serialize_start = time.monotonic()
-        records = _to_json_records(projected)
-        payload = json.dumps(records, separators=(",", ":"))
-        serialize_ms = (time.monotonic() - serialize_start) * 1000
+        # --- Query weather performance mart ---
+        weather_start = time.monotonic()
+        raw_weather = pl.read_database(
+            query=f"SELECT * FROM {_WEATHER_MART}",
+            connection=conn,
+        )
+        raw_weather = raw_weather.rename(
+            {col: col.lower() for col in raw_weather.columns}
+        )
+        weather_ms = (time.monotonic() - weather_start) * 1000
         context.log.info(
-            "JSON serialization completed in %.0fms (%d bytes)",
-            serialize_ms,
-            len(payload),
+            "Weather mart query completed in %.0fms (%d rows)",
+            weather_ms,
+            raw_weather.shape[0],
         )
 
-        # Write to local dashboard_exports/.
-        write_start = time.monotonic()
+        if raw_weather.shape[0] < _MIN_ROWS:
+            raise Failure(
+                description=(
+                    f"Source mart {_WEATHER_MART} has {raw_weather.shape[0]} rows, "
+                    f"need at least {_MIN_ROWS}. Refusing to publish a "
+                    f"broken-looking dashboard."
+                ),
+            )
+
+        missing_weather = [
+            c for c in _WEATHER_PERFORMANCE_COLUMNS if c not in raw_weather.columns
+        ]
+        if missing_weather:
+            raise Failure(
+                description=(
+                    f"Mart {_WEATHER_MART} is missing expected columns: "
+                    f"{missing_weather}. Check dbt model schema."
+                ),
+            )
+
+        # --- Project columns ---
+        daily_df = raw_daily.select(list(_DAILY_PERFORMANCE_COLUMNS))
+        weather_df = raw_weather.select(list(_WEATHER_PERFORMANCE_COLUMNS))
+
+        # --- Build assets dimension ---
+        # ``asset_capacity_mw`` and ``asset_size_category`` are in the daily
+        # mart; ``inferred_asset_type`` is in the weather mart (it is a model
+        # inference, not a generation concept).  Join on asset_id then rename
+        # to the data-contract column names.
+        daily_dim = raw_daily.select(list(_DAILY_ASSET_DIM_COLUMNS)).unique()
+        weather_type = raw_weather.select(["asset_id", "inferred_asset_type"]).unique(
+            subset=["asset_id"]
+        )
+        asset_id_suffix = pl.col("asset_id").str.split("_").list.last()
+        display_name_expr = (
+            pl.col("inferred_asset_type").str.to_titlecase()
+            + pl.lit(" Asset ")
+            + asset_id_suffix
+            + pl.lit(" (")
+            + pl.col("asset_capacity_mw").cast(pl.Int64).cast(pl.Utf8)
+            + pl.lit(" MW)")
+        )
+        assets_df = (
+            daily_dim.join(weather_type, on="asset_id", how="left")
+            .with_columns(display_name_expr.alias("display_name"))
+            .rename(
+                {
+                    "inferred_asset_type": "asset_type",
+                    "asset_capacity_mw": "capacity_mw",
+                    "asset_size_category": "size_category",
+                }
+            )
+        )
+
+        # --- Build manifest ---
+        try:
+            run_id: str = context.run.run_id
+        except (AttributeError, DagsterError):
+            # DagsterInvalidPropertyError (a DagsterError subclass) is raised
+            # when context.run is accessed in a direct-invocation test context.
+            run_id = ""
+        manifest: dict[str, Any] = {
+            "generated_at": datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ"),
+            "pipeline_run_id": run_id,
+            "date_range": {
+                "start": str(daily_df["date"].min()),
+                "end": str(daily_df["date"].max()),
+            },
+            "asset_count": int(assets_df.shape[0]),
+            "row_counts": {
+                "daily_performance": daily_df.shape[0],
+                "weather_performance": weather_df.shape[0],
+            },
+            "schema_version": _SCHEMA_VERSION,
+        }
+
+        # --- Serialize ---
+        daily_payload = json.dumps(_to_json_records(daily_df), separators=(",", ":"))
+        weather_payload = json.dumps(
+            _to_json_records(weather_df), separators=(",", ":")
+        )
+        assets_payload = json.dumps(_to_json_records(assets_df), separators=(",", ":"))
+        manifest_payload = json.dumps(manifest, separators=(",", ":"))
+
+        # --- Write files ---
         _EXPORT_DIR.mkdir(parents=True, exist_ok=True)
-        output_path = _EXPORT_DIR / _DAILY_PERFORMANCE_FILE
-        output_path.write_text(payload, encoding="utf-8")
-        write_ms = (time.monotonic() - write_start) * 1000
+        (_EXPORT_DIR / _DAILY_PERFORMANCE_FILE).write_text(
+            daily_payload, encoding="utf-8"
+        )
+        (_EXPORT_DIR / _WEATHER_PERFORMANCE_FILE).write_text(
+            weather_payload, encoding="utf-8"
+        )
+        (_EXPORT_DIR / _ASSETS_FILE).write_text(assets_payload, encoding="utf-8")
+        (_EXPORT_DIR / _MANIFEST_FILE).write_text(manifest_payload, encoding="utf-8")
+
         context.log.info(
-            "Local JSON write completed in %.0fms (%s)",
-            write_ms,
-            output_path,
+            "Wrote 4 export files to %s",
+            _EXPORT_DIR,
         )
 
         return MaterializeResult(
             metadata={
-                "row_count": projected.shape[0],
-                "column_count": projected.shape[1],
-                "byte_size": len(payload),
-                "output_path": MetadataValue.path(str(output_path)),
+                "daily_performance_rows": daily_df.shape[0],
+                "weather_performance_rows": weather_df.shape[0],
+                "asset_count": assets_df.shape[0],
+                "daily_performance_bytes": len(daily_payload),
+                "weather_performance_bytes": len(weather_payload),
+                "assets_bytes": len(assets_payload),
+                "manifest_bytes": len(manifest_payload),
+                "output_dir": MetadataValue.path(str(_EXPORT_DIR)),
                 "schema_version": _SCHEMA_VERSION,
             },
         )
@@ -201,9 +328,7 @@ def _to_json_records(df: pl.DataFrame) -> list[dict[str, Any]]:
     list[dict[str, Any]]
         JSON-ready records.
     """
-    # Replace NaN -> None and stringify dates via Polars built-in.
     cleaned = df.fill_nan(None)
-    # Polars' to_dicts handles dates correctly when we coerce them first.
     string_cols = [
         pl.col(c).cast(pl.Utf8) if cleaned[c].dtype == pl.Date else pl.col(c)
         for c in cleaned.columns
@@ -212,7 +337,7 @@ def _to_json_records(df: pl.DataFrame) -> list[dict[str, Any]]:
 
 
 # ===========================================================================
-# Publish asset: read local JSON, push to portfolio repo via Contents API
+# Publish asset: read local JSON, push to portfolio repo via Git Trees API
 # ===========================================================================
 
 
@@ -228,12 +353,9 @@ def waga_dashboard_export_publish(
 ) -> MaterializeResult:
     """Read local JSON files and push them to the portfolio repo.
 
-    Uses the GitHub Contents API via PyGithub. This works from Dagster
-    Cloud serverless because it's a plain HTTPS request — no git clone
-    or SSH required.
-
-    Idempotent: the Contents API replaces files by SHA, so running twice
-    produces either one commit or two identical commits, never corruption.
+    Uses the GitHub Git Trees API via PyGithub to push all 4 files in a
+    single commit. This works from Dagster Cloud serverless because it's a
+    plain HTTPS request — no git clone or SSH required.
 
     Parameters
     ----------
@@ -252,22 +374,19 @@ def waga_dashboard_export_publish(
     dagster.Failure
         If any file is missing locally or the GitHub API call fails.
     """
-
-    # Collect local files written by the build asset.
     files_to_push = {
+        _MANIFEST_FILE: _EXPORT_DIR / _MANIFEST_FILE,
+        _ASSETS_FILE: _EXPORT_DIR / _ASSETS_FILE,
         _DAILY_PERFORMANCE_FILE: _EXPORT_DIR / _DAILY_PERFORMANCE_FILE,
+        _WEATHER_PERFORMANCE_FILE: _EXPORT_DIR / _WEATHER_PERFORMANCE_FILE,
     }
 
-    missing = [name for name, path in files_to_push.items() if not path.exists()]
+    missing = [n for n, p in files_to_push.items() if not p.exists()]
     if missing:
         raise Failure(
-            description=(
-                f"Expected local files from build asset are missing: {missing}. "
-                f"Run waga_dashboard_export_build first."
-            ),
+            description=f"Missing local files from build asset: {missing}",
         )
 
-    auth_start = time.monotonic()
     gh = Github(portfolio_repo.token)
     try:
         repo = gh.get_repo(portfolio_repo.full_name)
@@ -278,70 +397,52 @@ def waga_dashboard_export_publish(
                 f"HTTP {exc.status}. Check PAT scope and repo name."
             ),
         ) from exc
-    auth_ms = (time.monotonic() - auth_start) * 1000
-    context.log.info("GitHub auth + repo lookup completed in %.0fms", auth_ms)
 
-    commit_message = f"chore(dashboard): refresh data {_refresh_timestamp()}"
-    commit_sha: str | None = None
-    total_bytes = 0
+    try:
+        ref = repo.get_git_ref(f"heads/{portfolio_repo.branch}")
+        head_commit = repo.get_git_commit(ref.object.sha)
 
-    for rel_name, local_path in files_to_push.items():
-        remote_path = f"{_REPO_DATA_DIR}/{rel_name}"
-        content = local_path.read_text(encoding="utf-8")
-        total_bytes += len(content)
-
-        push_start = time.monotonic()
-        try:
-            # Check if file already exists; Contents API requires SHA on update.
-            try:
-                existing = repo.get_contents(remote_path, ref=portfolio_repo.branch)
-                # get_contents can return a list if remote_path is a dir;
-                # guard against that even though we expect a single file.
-                if isinstance(existing, list):
-                    raise Failure(
-                        description=(
-                            f"{remote_path} resolves to a directory in "
-                            f"{portfolio_repo.full_name}, not a file."
-                        ),
-                    )
-                result = repo.update_file(
-                    path=remote_path,
-                    message=commit_message,
-                    content=content,
-                    sha=existing.sha,
-                    branch=portfolio_repo.branch,
+        blobs = []
+        total_bytes = 0
+        for rel_name, local_path in files_to_push.items():
+            content = local_path.read_text(encoding="utf-8")
+            total_bytes += len(content)
+            blob = repo.create_git_blob(content, "utf-8")
+            blobs.append(
+                InputGitTreeElement(
+                    path=f"{_REPO_DATA_DIR}/{rel_name}",
+                    mode="100644",
+                    type="blob",
+                    sha=blob.sha,
                 )
-            except GithubException as exc:
-                if exc.status == _HTTP_NOT_FOUND:
-                    # File doesn't exist yet — create it.
-                    result = repo.create_file(
-                        path=remote_path,
-                        message=commit_message,
-                        content=content,
-                        branch=portfolio_repo.branch,
-                    )
-                else:
-                    raise
-        except GithubException as exc:
-            raise Failure(
-                description=(
-                    f"Failed to push {remote_path} to "
-                    f"{portfolio_repo.full_name}: HTTP {exc.status}"
-                ),
-            ) from exc
+            )
 
-        push_ms = (time.monotonic() - push_start) * 1000
-        context.log.info(
-            "Pushed %s in %.0fms (%d bytes)",
-            remote_path,
-            push_ms,
-            len(content),
+        new_tree = repo.create_git_tree(blobs, head_commit.tree)
+        try:
+            run_id_pub: str = context.run.run_id
+        except (AttributeError, DagsterError):
+            run_id_pub = "unknown"
+        date_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
+        commit_message = (
+            f"chore(dashboard): refresh data {date_str} [pipeline run {run_id_pub}]"
         )
+        new_commit = repo.create_git_commit(
+            message=commit_message,
+            tree=new_tree,
+            parents=[head_commit],
+        )
+        ref.edit(sha=new_commit.sha)
+        commit_sha = new_commit.sha
 
-        commit_sha = result["commit"].sha
+    except GithubException as exc:
+        raise Failure(
+            description=(
+                f"Failed to push dashboard data to "
+                f"{portfolio_repo.full_name}: HTTP {exc.status}"
+            ),
+        ) from exc
 
-    if commit_sha is None:
-        raise Failure(description="No files were pushed; commit_sha is None.")
+    context.log.info("Pushed 4 files in single commit %s", commit_sha)
 
     return MaterializeResult(
         metadata={

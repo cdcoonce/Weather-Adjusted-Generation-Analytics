@@ -12,9 +12,11 @@ from weather_analytics.dashboard.data_loader import (
     EXPECTED_SCHEMA_VERSION,
     Manifest,
     clear_cache,
+    load_assets,
     load_daily_performance,
     load_json,
     load_manifest,
+    load_weather_performance,
 )
 
 _FIXTURE_ASSET_COUNT = 10
@@ -36,12 +38,86 @@ DAILY_FIXTURE = [
         "date": "2026-04-10",
         "total_net_generation_mwh": 120.5,
         "daily_capacity_factor": 0.41,
+        "avg_availability_pct": 98.0,
+        "total_curtailment_mwh": 2.5,
+        "daily_performance_rating": "good",
+        "excellent_hours": 4,
+        "good_hours": 10,
+        "fair_hours": 6,
+        "poor_hours": 4,
+        "avg_wind_speed_mps": 7.2,
+        "avg_ghi": 450.0,
+        "avg_temperature_c": 18.5,
+        "data_completeness_pct": 100.0,
     },
     {
         "asset_id": "ASSET_002",
         "date": "2026-04-10",
         "total_net_generation_mwh": 200.0,
         "daily_capacity_factor": 0.45,
+        "avg_availability_pct": 99.0,
+        "total_curtailment_mwh": 0.0,
+        "daily_performance_rating": "excellent",
+        "excellent_hours": 12,
+        "good_hours": 8,
+        "fair_hours": 4,
+        "poor_hours": 0,
+        "avg_wind_speed_mps": 8.5,
+        "avg_ghi": 500.0,
+        "avg_temperature_c": 19.0,
+        "data_completeness_pct": 100.0,
+    },
+]
+
+_DAILY_EXPECTED_COLUMNS = {
+    "asset_id",
+    "date",
+    "total_net_generation_mwh",
+    "daily_capacity_factor",
+    "avg_availability_pct",
+    "total_curtailment_mwh",
+    "daily_performance_rating",
+    "excellent_hours",
+    "good_hours",
+    "fair_hours",
+    "poor_hours",
+    "avg_wind_speed_mps",
+    "avg_ghi",
+    "avg_temperature_c",
+    "data_completeness_pct",
+}
+
+ASSETS_FIXTURE = [
+    {
+        "asset_id": "WIND_001",
+        "asset_type": "wind",
+        "capacity_mw": 50.0,
+        "size_category": "medium",
+        "display_name": "Wind Asset 001 (50 MW)",
+    },
+    {
+        "asset_id": "SOLAR_002",
+        "asset_type": "solar",
+        "capacity_mw": 75.0,
+        "size_category": "large",
+        "display_name": "Solar Asset 002 (75 MW)",
+    },
+]
+
+WEATHER_PERFORMANCE_FIXTURE = [
+    {
+        "asset_id": "WIND_001",
+        "date": "2026-04-10",
+        "performance_score": 0.85,
+        "performance_category": "good",
+        "avg_expected_generation_mwh": 100.0,
+        "avg_actual_generation_mwh": 85.0,
+        "avg_performance_ratio_pct": 85.0,
+        "wind_r_squared": 0.92,
+        "solar_r_squared": None,
+        "inferred_asset_type": "wind",
+        "rolling_7d_avg_cf": 0.40,
+        "rolling_30d_avg_cf": 0.38,
     },
 ]
 
@@ -191,10 +267,46 @@ def test_load_daily_performance_returns_polars_frame(
     )
     df = asyncio.run(load_daily_performance())
     assert isinstance(df, pl.DataFrame)
-    assert df.shape == (2, 4)
+    assert df.shape == (2, len(_DAILY_EXPECTED_COLUMNS))
+    assert set(df.columns) == _DAILY_EXPECTED_COLUMNS
+
+
+@pytest.mark.unit
+def test_load_assets_returns_polars_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_fetch(url: str) -> str:
+        return json.dumps(ASSETS_FIXTURE)
+
+    monkeypatch.setattr(
+        "weather_analytics.dashboard.data_loader._fetch_text",
+        _fake_fetch,
+    )
+    df = asyncio.run(load_assets())
+    assert isinstance(df, pl.DataFrame)
+    assert df.shape[0] == len(ASSETS_FIXTURE)
     assert set(df.columns) == {
         "asset_id",
-        "date",
-        "total_net_generation_mwh",
-        "daily_capacity_factor",
+        "asset_type",
+        "capacity_mw",
+        "size_category",
+        "display_name",
     }
+
+
+@pytest.mark.unit
+def test_load_weather_performance_returns_polars_frame(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    async def _fake_fetch(url: str) -> str:
+        return json.dumps(WEATHER_PERFORMANCE_FIXTURE)
+
+    monkeypatch.setattr(
+        "weather_analytics.dashboard.data_loader._fetch_text",
+        _fake_fetch,
+    )
+    df = asyncio.run(load_weather_performance())
+    assert isinstance(df, pl.DataFrame)
+    assert df.shape[0] == len(WEATHER_PERFORMANCE_FIXTURE)
+    assert "asset_id" in df.columns
+    assert "performance_score" in df.columns

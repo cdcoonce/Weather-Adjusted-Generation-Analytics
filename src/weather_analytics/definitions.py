@@ -24,6 +24,7 @@ from weather_analytics.assets.ingestion import (
     waga_weather_ingestion,
 )
 from weather_analytics.checks import (
+    waga_dashboard_export_commit_landed,
     waga_generation_freshness_check,
     waga_generation_value_range_check,
     waga_mart_correlation_row_count_check,
@@ -65,6 +66,7 @@ defs = Definitions(
         waga_mart_correlation_row_count_check,
         waga_weather_value_range_check,
         waga_generation_value_range_check,
+        waga_dashboard_export_commit_landed,
     ],
     schedules=[
         waga_daily_ingestion_schedule,
