@@ -40,6 +40,7 @@ from weather_analytics.dashboard.components.asset_view import asset_panel
 from weather_analytics.dashboard.components.filters import Filters
 from weather_analytics.dashboard.components.fleet_view import fleet_panel
 from weather_analytics.dashboard.components.kpi_cards import kpi_row
+from weather_analytics.dashboard.components.weather_view import weather_panel
 from weather_analytics.dashboard.data_loader import (
     EXPECTED_SCHEMA_VERSION,
     load_assets,
@@ -318,6 +319,7 @@ async def build_body() -> pn.Column:
     tabs = pn.Tabs(
         ("Fleet Overview", fleet_panel(_filters)),
         ("Asset Deep-Dive", asset_panel(_filters)),
+        ("Weather Correlation", weather_panel(_filters)),
         sizing_mode="stretch_width",
     )
 
