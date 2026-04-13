@@ -256,22 +256,23 @@ css = [
 
 [[package]]
 name = "bokeh"
-version = "3.4.3"
+version = "3.7.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "contourpy" },
     { name = "jinja2" },
+    { name = "narwhals" },
     { name = "numpy" },
     { name = "packaging" },
     { name = "pandas" },
     { name = "pillow" },
     { name = "pyyaml" },
-    { name = "tornado" },
+    { name = "tornado", marker = "sys_platform != 'emscripten'" },
     { name = "xyzservices" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/c1/a8/4f750e1febe3b8d448794a7b85cd0efd2eb649eb915c990bcdd3650a5f3b/bokeh-3.4.3.tar.gz", hash = "sha256:b7c22fb0f7004b04f12e1b7b26ee0269a26737a08ded848fb58f6a34ec1eb155", size = 6410715, upload-time = "2024-07-25T10:44:33.237Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/75/18/12d0d6024177ad18ba65deffc363046d0cbafe116f8b964a9efa85d2800f/bokeh-3.7.3.tar.gz", hash = "sha256:70a89a9f797b103d5ee6ad15fb7944adda115cf0da996ed0b75cfba61cb12f2b", size = 6366610, upload-time = "2025-05-12T12:13:29.318Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/65/5d/e96520996607c9b894a4716ddedc447a68351b0a8729f26ac012c8e7041b/bokeh-3.4.3-py3-none-any.whl", hash = "sha256:c6f33817f866fc67fbeb5df79cd13a8bb592c05c591f3fd7f4f22b824f7afa01", size = 7017720, upload-time = "2024-07-25T10:44:29.542Z" },
+    { url = "https://files.pythonhosted.org/packages/91/48/08b2382e739236aa3360b7976360ba3e0c043b6234e25951c18c1eb6fa06/bokeh-3.7.3-py3-none-any.whl", hash = "sha256:b0e79dd737f088865212e4fdcb0f3b95d087f0f088bf8ca186a300ab1641e2c7", size = 7031447, upload-time = "2025-05-12T12:13:27.47Z" },
 ]
 
 [[package]]
@@ -2823,7 +2824,7 @@ wheels = [
 
 [[package]]
 name = "panel"
-version = "1.4.5"
+version = "1.6.3"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "bleach" },
@@ -2832,17 +2833,17 @@ dependencies = [
     { name = "markdown" },
     { name = "markdown-it-py" },
     { name = "mdit-py-plugins" },
+    { name = "packaging" },
     { name = "pandas" },
     { name = "param" },
     { name = "pyviz-comms" },
     { name = "requests" },
     { name = "tqdm" },
     { name = "typing-extensions" },
-    { name = "xyzservices" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/74/92/92e001ec389d25db4e00323a27cadb08c111053c6819c4191fa9e2a1171b/panel-1.4.5.tar.gz", hash = "sha256:a7c9be109b57bdea16a143ce6a897500e1172a28b8a7c0dcfd5b7f61c616ea42", size = 39096558, upload-time = "2024-08-02T09:04:07.179Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/f0/92/38656349dc1f5f2270c9804740dd7a85715239e4f3fe2e932970fbe58629/panel-1.6.3.tar.gz", hash = "sha256:6ae6e9ffc9aec0a00587b2ce6f4dcb3a0f5f7aa914dac702feaa0d0451aab976", size = 30193596, upload-time = "2025-04-23T16:48:17.526Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f4/e3/81303aec6a131eefa21030f2bdea12c0e0f57d1b416e7bda91841f791d20/panel-1.4.5-py3-none-any.whl", hash = "sha256:a6dbddd65e9e68c54a9b683f103b79b48fcea5dd9f463b81a783ea11520fe9cb", size = 24680678, upload-time = "2024-08-02T09:04:00.174Z" },
+    { url = "https://files.pythonhosted.org/packages/7a/fe/d01b6eae59933d56c345e57cdde5ffe379b7b1f56d192782ab8071249f73/panel-1.6.3-py3-none-any.whl", hash = "sha256:ccd2a0587ab382bd55b8ea099706f31b64aadac697b8a41923d3b18b9ed618d6", size = 28210643, upload-time = "2025-04-23T16:48:13.498Z" },
 ]
 
 [[package]]
@@ -3843,9 +3844,14 @@ dev = [
     { name = "ruff" },
 ]
 
+[package.dev-dependencies]
+dev = [
+    { name = "pytest-cov" },
+]
+
 [package.metadata]
 requires-dist = [
-    { name = "bokeh", marker = "extra == 'dashboard'", specifier = ">=3.4.0,<3.5.0" },
+    { name = "bokeh", marker = "extra == 'dashboard'", specifier = ">=3.5.0,<3.8.0" },
     { name = "cryptography", specifier = ">=41.0.0" },
     { name = "dagster", specifier = ">=1.9.0,<1.12.20" },
     { name = "dagster-cloud", specifier = ">=1.9.0,<1.12.20" },
@@ -3863,7 +3869,7 @@ requires-dist = [
     { name = "nbformat", specifier = ">=5.10.4" },
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=2.3.3" },
-    { name = "panel", marker = "extra == 'dashboard'", specifier = ">=1.4.0,<1.5.0" },
+    { name = "panel", marker = "extra == 'dashboard'", specifier = ">=1.6.0,<1.7.0" },
     { name = "plotly", specifier = ">=6.5.0" },
     { name = "polars", extras = ["rtcompat"], specifier = ">=0.19.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
@@ -3881,6 +3887,9 @@ requires-dist = [
     { name = "typer", specifier = ">=0.9.0" },
 ]
 provides-extras = ["dev", "dashboard"]
+
+[package.metadata.requires-dev]
+dev = [{ name = "pytest-cov", specifier = ">=7.0.0" }]
 
 [[package]]
 name = "requests"
