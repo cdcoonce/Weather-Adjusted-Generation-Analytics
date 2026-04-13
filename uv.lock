@@ -3834,9 +3834,11 @@ dashboard = [
     { name = "panel" },
 ]
 dev = [
+    { name = "bokeh" },
     { name = "ipykernel" },
     { name = "jupyter" },
     { name = "mypy" },
+    { name = "panel" },
     { name = "pre-commit" },
     { name = "pytest" },
     { name = "pytest-cov" },
@@ -3852,6 +3854,7 @@ dev = [
 [package.metadata]
 requires-dist = [
     { name = "bokeh", marker = "extra == 'dashboard'", specifier = ">=3.5.0,<3.8.0" },
+    { name = "bokeh", marker = "extra == 'dev'", specifier = ">=3.5.0,<3.8.0" },
     { name = "cryptography", specifier = ">=41.0.0" },
     { name = "dagster", specifier = ">=1.9.0,<1.12.20" },
     { name = "dagster-cloud", specifier = ">=1.9.0,<1.12.20" },
@@ -3870,6 +3873,7 @@ requires-dist = [
     { name = "numpy", specifier = ">=1.26.0" },
     { name = "pandas", specifier = ">=2.3.3" },
     { name = "panel", marker = "extra == 'dashboard'", specifier = ">=1.6.0,<1.7.0" },
+    { name = "panel", marker = "extra == 'dev'", specifier = ">=1.6.0,<1.7.0" },
     { name = "plotly", specifier = ">=6.5.0" },
     { name = "polars", extras = ["rtcompat"], specifier = ">=0.19.0" },
     { name = "pre-commit", marker = "extra == 'dev'", specifier = ">=3.5.0" },
