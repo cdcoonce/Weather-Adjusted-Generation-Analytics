@@ -20,6 +20,7 @@ import pytest
 
 from weather_analytics.dashboard.components.filters import Filters
 from weather_analytics.dashboard.components.fleet_view import (
+    _ASSET_LINE_PALETTE,
     _FALLBACK_COLOR,
     _SOLAR_COLOR,
     _WIND_COLOR,
@@ -276,21 +277,22 @@ def test_prep_generation_lines_values_match_daily_mwh() -> None:
 
 
 @pytest.mark.unit
-def test_prep_generation_lines_wind_color_is_correct() -> None:
-    """Wind assets get the wind color."""
+def test_prep_generation_lines_single_asset_gets_first_palette_color() -> None:
+    """A single asset (index 0) gets the first colour in _ASSET_LINE_PALETTE."""
     filtered = _apply_fleet_filters(_DAILY_DF, _ASSETS_DF, "WIND_001", "All", "", "")
     lines = _prep_generation_lines(filtered)
     _asset_id, _dates, _values, color = lines[0]
-    assert color == _WIND_COLOR
+    assert color == _ASSET_LINE_PALETTE[0]
 
 
 @pytest.mark.unit
-def test_prep_generation_lines_solar_color_is_correct() -> None:
-    """Solar assets get the solar color."""
-    filtered = _apply_fleet_filters(_DAILY_DF, _ASSETS_DF, "SOLAR_001", "All", "", "")
+def test_prep_generation_lines_colors_differ_across_assets() -> None:
+    """Multiple assets receive distinct colours from the palette."""
+    filtered = _apply_fleet_filters(_DAILY_DF, _ASSETS_DF, "All", "All", "", "")
     lines = _prep_generation_lines(filtered)
-    _asset_id, _dates, _values, color = lines[0]
-    assert color == _SOLAR_COLOR
+    colors = [c for _, _, _, c in lines]
+    # At least two distinct assets should have different colours.
+    assert len(set(colors)) > 1
 
 
 @pytest.mark.unit
