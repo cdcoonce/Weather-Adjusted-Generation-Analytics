@@ -38,7 +38,9 @@ def filter_assets_by_type(assets_df: pl.DataFrame, asset_type: str) -> list[str]
     if asset_type == "All":
         ids = assets_df["asset_id"].to_list()
     else:
-        ids = assets_df.filter(pl.col("asset_type") == asset_type)["asset_id"].to_list()
+        ids = assets_df.filter(
+            pl.col("asset_type").str.to_lowercase() == asset_type.lower()
+        )["asset_id"].to_list()
     return ["All", *ids]
 
 

@@ -226,19 +226,23 @@ def _prep_scatter(
     if daily_df.is_empty():
         return [], [], 0.0
 
-    df = daily_df.sort("date")
-    y_vals: list[float] = df["total_net_generation_mwh"].to_list()
+    x_col = "avg_ghi" if asset_type.lower() == "solar" else "avg_wind_speed_mps"
 
-    if asset_type == "Solar":
-        x_vals: list[float] = df["avg_ghi"].to_list()
-    else:
-        x_vals = df["avg_wind_speed_mps"].to_list()
+    # Drop rows where the weather predictor or generation is null so that
+    # numpy receives only finite floats.
+    df = daily_df.sort("date").drop_nulls(subset=[x_col, "total_net_generation_mwh"])
+
+    if df.is_empty():
+        return [], [], 0.0
+
+    x_vals: list[float] = df[x_col].to_list()
+    y_vals: list[float] = df["total_net_generation_mwh"].to_list()
 
     if len(x_vals) < _MIN_REGRESSION_POINTS:
         return x_vals, y_vals, 0.0
 
-    x_arr = np.array(x_vals)
-    y_arr = np.array(y_vals)
+    x_arr = np.array(x_vals, dtype=float)
+    y_arr = np.array(y_vals, dtype=float)
     coeffs = np.polyfit(x_arr, y_arr, 1)
     y_pred = np.polyval(coeffs, x_arr)
     ss_res = float(np.sum((y_arr - y_pred) ** 2))
@@ -419,7 +423,7 @@ def _render_scatter(daily_df: pl.DataFrame, asset_type: str) -> Any:
     if not x_vals:
         return pn.pane.Markdown("_No scatter data available._")
 
-    if asset_type == "Solar":
+    if asset_type.lower() == "solar":
         x_label = "GHI (W/m²)"
         color = _SOLAR_COLOR
         title = f"GHI vs. Generation (R\u00b2={r2:.3f})"

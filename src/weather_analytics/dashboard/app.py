@@ -308,6 +308,13 @@ async def build_body() -> pn.Column:
 
     # Populate filter state from loaded data.
     _filters.initialize(assets_df, manifest.date_range_start, manifest.date_range_end)
+
+    # Enrich daily and weather DataFrames with asset_type so every component
+    # can filter by type without needing a separate assets join.
+    asset_type_map = assets_df.select(["asset_id", "asset_type"])
+    daily_df = daily_df.join(asset_type_map, on="asset_id", how="left")
+    weather_df = weather_df.join(asset_type_map, on="asset_id", how="left")
+
     # Attach DataFrames so reactive closures can read them.
     _filters._daily_df = daily_df  # type: ignore[attr-defined]
     _filters._weather_df = weather_df  # type: ignore[attr-defined]
@@ -359,8 +366,12 @@ _layout = pn.Column(_header, sizing_mode="stretch_width")
 
 async def _init() -> None:
     """Fetch data and append the dashboard body to the top-level layout."""
-    body = await build_body()
-    _layout.append(body)
+    try:
+        body = await build_body()
+        _layout.append(body)
+    except Exception as exc:
+        _console_error(f"Dashboard initialisation failed: {exc!r}")
+        _layout.append(_error_banner(f"Dashboard initialisation failed: {exc}"))
 
 
 pn.state.onload(_init)

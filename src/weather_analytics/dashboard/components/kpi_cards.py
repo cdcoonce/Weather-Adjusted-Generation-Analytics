@@ -19,15 +19,16 @@ _DASH = "—"
 _CARD_CSS = """
 .kpi-card {
   background: #ffffff;
-  border-radius: 10px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  padding: 1.25rem 1.5rem;
+  border-left: 4px solid #353535;
+  border-radius: 0 10px 10px 0;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.12);
+  padding: 1.25rem 1.5rem 1.25rem 1.25rem;
   font-family: "Poppins", sans-serif;
   min-width: 180px;
   flex: 1;
 }
 .kpi-value {
-  font-size: 2rem;
+  font-size: 2.2rem;
   font-weight: 600;
   color: #353535;
   margin: 0;
@@ -39,7 +40,7 @@ _CARD_CSS = """
   color: #555555;
   text-transform: uppercase;
   letter-spacing: 0.08em;
-  margin-top: 0.4rem;
+  margin-top: 0.5rem;
 }
 """
 
@@ -110,7 +111,9 @@ def _apply_filters(
     if asset_id != "All" and "asset_id" in result.columns:
         result = result.filter(pl.col("asset_id") == asset_id)
     if asset_type != "All" and "asset_type" in result.columns:
-        result = result.filter(pl.col("asset_type") == asset_type)
+        result = result.filter(
+            pl.col("asset_type").str.to_lowercase() == asset_type.lower()
+        )
     if date_start and "date" in result.columns:
         result = result.filter(pl.col("date") >= date_start)
     if date_end and "date" in result.columns:
@@ -171,17 +174,20 @@ def kpi_row(filters: Any) -> Any:
             date_start: str,
             date_end: str,
         ) -> pn.pane.HTML:
+            _raw_daily = getattr(filters, "_daily_df", None)
             daily_df: pl.DataFrame = (
-                getattr(filters, "_daily_df", None) or pl.DataFrame()
+                _raw_daily if _raw_daily is not None else pl.DataFrame()
             )
+            _raw_weather = getattr(filters, "_weather_df", None)
             weather_df: pl.DataFrame = (
-                getattr(filters, "_weather_df", None) or pl.DataFrame()
+                _raw_weather if _raw_weather is not None else pl.DataFrame()
             )
             kpis = compute_kpis(
                 daily_df, weather_df, asset_id, asset_type, date_start, date_end
             )
             value = kpis[value_key]
             html = (
+                f"<style>{_CARD_CSS}</style>"
                 f'<div class="kpi-card">'
                 f'<p class="kpi-value">{value}</p>'
                 f'<p class="kpi-label">{label}</p>'
@@ -197,5 +203,4 @@ def kpi_row(filters: Any) -> Any:
         _card("Avg Availability %", "avg_availability"),
         _card("Avg Performance Score", "avg_performance_score"),
         sizing_mode="stretch_width",
-        stylesheets=[_CARD_CSS],
     )

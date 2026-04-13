@@ -91,7 +91,9 @@ def _prep_r2_bars(
         df = df.filter(pl.col("asset_id") == asset_id)
 
     if asset_type != "All" and not assets_df.is_empty():
-        valid_ids = assets_df.filter(pl.col("asset_type") == asset_type)["asset_id"]
+        valid_ids = assets_df.filter(
+            pl.col("asset_type").str.to_lowercase() == asset_type.lower()
+        )["asset_id"]
         df = df.filter(pl.col("asset_id").is_in(valid_ids))
 
     if df.is_empty():
@@ -148,7 +150,7 @@ def _prep_wind_scatter(
 
     wind_ids: list[str] = []
     if not assets_df.is_empty():
-        wind_ids = assets_df.filter(pl.col("asset_type") == "Wind")[
+        wind_ids = assets_df.filter(pl.col("asset_type").str.to_lowercase() == "wind")[
             "asset_id"
         ].to_list()
 
@@ -217,9 +219,9 @@ def _prep_solar_scatter(
 
     solar_ids: list[str] = []
     if not assets_df.is_empty():
-        solar_ids = assets_df.filter(pl.col("asset_type") == "Solar")[
-            "asset_id"
-        ].to_list()
+        solar_ids = assets_df.filter(
+            pl.col("asset_type").str.to_lowercase() == "solar"
+        )["asset_id"].to_list()
 
     if not solar_ids:
         return _empty
