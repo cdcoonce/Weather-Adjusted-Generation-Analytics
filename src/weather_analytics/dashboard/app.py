@@ -348,8 +348,20 @@ pn.extension(sizing_mode="stretch_width", raw_css=[_PORTFOLIO_CSS])
 curdoc().theme = Theme(json=build_theme_json())
 
 _header = pn.pane.Markdown(f"# {_DASHBOARD_TITLE}\n\n{_DASHBOARD_SUBTITLE}")
-pn.Column(
-    _header,
-    pn.bind(build_body),
-    sizing_mode="stretch_width",
-).servable()
+
+# _layout is the mutable top-level column.  pn.state.onload appends the
+# async body after the initial render is committed to the client, which is
+# the correct pattern for pyodide-worker mode.  pn.bind(async_fn) is NOT
+# used here because pyodide-worker serialises the document before async
+# callbacks complete, so the body would always render blank.
+_layout = pn.Column(_header, sizing_mode="stretch_width")
+
+
+async def _init() -> None:
+    """Fetch data and append the dashboard body to the top-level layout."""
+    body = await build_body()
+    _layout.append(body)
+
+
+pn.state.onload(_init)
+_layout.servable()
