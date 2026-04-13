@@ -10,6 +10,7 @@ from pathlib import Path
 
 import pytest
 
+from weather_analytics.assets import dbt_assets as _dbt_assets_module
 from weather_analytics.assets.dbt_assets import (
     DBT_PROJECT_DIR,
     dbt_project,
@@ -24,8 +25,8 @@ class TestDbtAssetsModule:
     """Verify the dbt_assets module loads and is configured correctly."""
 
     def test_module_imports_without_error(self) -> None:
-        """The dbt_assets module can be imported."""
-        from weather_analytics.assets import dbt_assets  # noqa: F401
+        """The dbt_assets module is importable."""
+        assert _dbt_assets_module is not None
 
     def test_dbt_project_dir_exists(self) -> None:
         """DBT_PROJECT_DIR points to an existing directory."""

@@ -33,6 +33,7 @@ dependencies = [
     "ipykernel>=7.1.0",
     "nbformat>=5.10.4",
     "pandas>=2.3.3",
+    "pygithub>=2.1.0",
 ]
 
 [project.optional-dependencies]
@@ -45,6 +46,12 @@ dev = [
     "pre-commit>=3.5.0",
     "ipykernel>=6.27.0",
     "jupyter>=1.0.0",
+    "panel>=1.6.0,<1.7.0",
+    "bokeh>=3.5.0,<3.8.0",
+]
+dashboard = [
+    "panel>=1.6.0,<1.7.0",
+    "bokeh>=3.5.0,<3.8.0",
 ]
 
 [build-system]
@@ -62,6 +69,21 @@ ignore = ["ANN101", "ANN102", "D203", "D213"]
 
 [tool.ruff.per-file-ignores]
 "tests/*" = ["ANN", "ARG", "S101"]
+# Dashboard module: panel/bokeh/js imports are lazy so the module can be
+# imported in non-Pyodide contexts (tests, local dev) without those packages.
+# Any-typed returns for JSON and exception ergonomics for user-facing errors
+# are deliberate and specific to this module's Pyodide role.
+"src/weather_analytics/dashboard/*" = [
+    "PLC0415",  # lazy imports required for Pyodide/test compatibility
+    "ANN401",   # JSON payloads are genuinely Any
+    "TRY003",   # user-facing error strings are fine here
+    "EM101",
+    "EM102",
+    "BLE001",   # fetch failures are uniformly converted to a banner
+    "PLR0913",  # filter helpers intentionally take 6 args for clarity
+]
+# CI utility scripts use print() for user-visible log output.
+"scripts/*" = ["T201", "INP001"]
 
 [tool.mypy]
 python_version = "3.12"
@@ -77,7 +99,16 @@ warn_no_return = true
 strict_equality = true
 
 [[tool.mypy.overrides]]
-module = ["dagster.*", "dlt.*", "polars.*", "snowflake.*", "cryptography.*"]
+module = [
+    "dagster.*",
+    "dlt.*",
+    "polars.*",
+    "snowflake.*",
+    "cryptography.*",
+    "github.*",
+    "panel.*",
+    "bokeh.*",
+]
 ignore_missing_imports = true
 
 [tool.pytest.ini_options]
@@ -104,3 +135,8 @@ filterwarnings = [
 module_name = "weather_analytics"
 working_directory = "."
 pythonpath = [".", "src"]
+
+[dependency-groups]
+dev = [
+    "pytest-cov>=7.0.0",
+]

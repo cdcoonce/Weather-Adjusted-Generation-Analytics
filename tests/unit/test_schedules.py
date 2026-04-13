@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from weather_analytics.schedules import (
+    waga_daily_dashboard_schedule,
     waga_daily_dbt_schedule,
     waga_daily_ingestion_schedule,
     waga_weekly_analytics_schedule,
@@ -32,6 +33,16 @@ class TestScheduleDefinitions:
 
     def test_dbt_schedule_timezone(self) -> None:
         assert waga_daily_dbt_schedule.execution_timezone == "UTC"
+
+    def test_dashboard_schedule_name(self) -> None:
+        assert waga_daily_dashboard_schedule.name == "waga_daily_dashboard"
+
+    def test_dashboard_schedule_cron(self) -> None:
+        # 09:30 UTC — 30 min after the dbt schedule so the marts are ready.
+        assert waga_daily_dashboard_schedule.cron_schedule == "30 9 * * *"
+
+    def test_dashboard_schedule_timezone(self) -> None:
+        assert waga_daily_dashboard_schedule.execution_timezone == "UTC"
 
     def test_analytics_schedule_name(self) -> None:
         assert waga_weekly_analytics_schedule.name == "waga_weekly_analytics"

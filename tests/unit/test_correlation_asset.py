@@ -35,6 +35,7 @@ def test_raises_failure_on_insufficient_rows() -> None:
         }
     )
     mock_resource, _ = _make_mock_snowflake()
+    context = build_asset_context()
 
     with (
         patch(
@@ -43,7 +44,6 @@ def test_raises_failure_on_insufficient_rows() -> None:
         ),
         pytest.raises(Failure, match="need at least"),
     ):
-        context = build_asset_context()
         waga_correlation_analysis(context=context, snowflake=mock_resource)
 
 
@@ -57,7 +57,7 @@ def test_emits_metadata_on_success() -> None:
             "avg_temperature_c": list(range(n)),
         }
     )
-    mock_resource, mock_conn = _make_mock_snowflake()
+    mock_resource, _mock_conn = _make_mock_snowflake()
 
     with patch(
         "weather_analytics.assets.analytics.correlation.pl.read_database",

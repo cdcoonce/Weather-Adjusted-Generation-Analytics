@@ -3,6 +3,10 @@
 from __future__ import annotations
 
 import pytest
+from dagster import Definitions
+
+import weather_analytics
+from weather_analytics.definitions import defs
 
 
 @pytest.mark.unit
@@ -11,23 +15,18 @@ class TestDefinitionsSmoke:
 
     def test_definitions_import(self) -> None:
         """Definitions module can be imported."""
-        from weather_analytics.definitions import defs  # noqa: F401
+        assert defs is not None
 
     def test_definitions_is_definitions_instance(self) -> None:
         """defs is a Dagster Definitions instance."""
-        from dagster import Definitions
-        from weather_analytics.definitions import defs
-
         assert isinstance(defs, Definitions)
 
     def test_definitions_has_resources(self) -> None:
         """Definitions includes at least the Snowflake resource."""
-        from weather_analytics.definitions import defs
-
         resources = defs.resources
         assert resources is not None
         assert "snowflake" in resources
 
     def test_package_importable(self) -> None:
         """The weather_analytics package itself can be imported."""
-        import weather_analytics  # noqa: F401
+        assert weather_analytics is not None
