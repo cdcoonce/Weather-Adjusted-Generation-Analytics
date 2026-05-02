@@ -55,7 +55,10 @@ def test_create_pipeline_returns_dlt_pipeline(
             "cryptography.hazmat.primitives.serialization.load_pem_private_key",
             return_value=MagicMock(
                 private_bytes=MagicMock(
-                    return_value=b"-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n"
+                    return_value=(
+                        b"-----BEGIN PRIVATE KEY-----\n"
+                        b"fake\n-----END PRIVATE KEY-----\n"
+                    )
                 )
             ),
         ),
@@ -89,7 +92,10 @@ def test_create_pipeline_passes_snowflake_credentials(
             "cryptography.hazmat.primitives.serialization.load_pem_private_key",
             return_value=MagicMock(
                 private_bytes=MagicMock(
-                    return_value=b"-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----\n"
+                    return_value=(
+                        b"-----BEGIN PRIVATE KEY-----\n"
+                        b"fake\n-----END PRIVATE KEY-----\n"
+                    )
                 )
             ),
         ),

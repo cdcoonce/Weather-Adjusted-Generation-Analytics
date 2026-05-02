@@ -6,7 +6,7 @@ LazyFrame-first signatures in the ``src/weather_analytics`` package.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import UTC, datetime
 
 import polars as pl
 import pytest
@@ -20,6 +20,11 @@ from weather_analytics.lib.polars_utils import (
     calculate_correlation,
     filter_by_date_range,
 )
+
+_EXPECTED_CORR_ROWS = 2
+_EXPECTED_HOUR = 13
+_EXPECTED_YEAR = 2023
+_SAMPLE_TIMESTAMP = datetime(2023, 1, 1, 13, 0, 0, tzinfo=UTC)
 
 
 @pytest.mark.unit
@@ -103,23 +108,23 @@ def test_calculate_correlation_static_partition() -> None:
     ).collect()
 
     assert set(out.columns) == {"asset_id", "corr_x_y"}
-    assert out.shape[0] == 2
+    assert out.shape[0] == _EXPECTED_CORR_ROWS
 
 
 @pytest.mark.unit
 def test_add_time_features() -> None:
     lf = (
-        pl.DataFrame({"timestamp": [datetime(2023, 1, 1, 13, 0, 0)]})
+        pl.DataFrame({"timestamp": [_SAMPLE_TIMESTAMP]})
         .with_columns(pl.col("timestamp").cast(pl.Datetime))
         .lazy()
     )
     out = add_time_features(lf).collect()
 
-    assert out["hour"].item() == 13
+    assert out["hour"].item() == _EXPECTED_HOUR
     assert out["day"].item() == 1
     assert out["month"].item() == 1
     assert out["quarter"].item() == 1
-    assert out["year"].item() == 2023
+    assert out["year"].item() == _EXPECTED_YEAR
 
 
 @pytest.mark.unit
