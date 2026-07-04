@@ -1,0 +1,120 @@
+{# src/weather_analytics/cockpit/templates/index.html.j2 #}
+{%- macro _line_svg(s) -%}
+{%- if s -%}
+<svg viewBox="0 0 {{ s.width }} {{ s.height }}" preserveAspectRatio="none" role="img">
+  <path d="{{ s.area_path }}" fill="rgba(90,169,230,0.20)" />
+  <polyline points="{{ s.polyline }}" fill="none" stroke="var(--accent)" stroke-width="2" />
+</svg>
+<div class="axis"><span>{{ s.x0_label }}</span><span>max {{ '%.2f'|format(s.y_max) }}</span><span>{{ s.x1_label }}</span></div>
+{%- else -%}<div class="nodata">no data in range</div>{%- endif -%}
+{%- endmacro -%}
+{%- macro _hbars_html(rows, show_type) -%}
+{%- if rows -%}
+{%- for r in rows -%}
+<div class="hbar-row"><div class="hbar-label">{{ r.label }}</div>
+<div class="hbar-track"><div class="hbar-fill{% if show_type and r.asset_type == 'solar' %} solar{% endif %}" style="width: {{ r.pct }}%"></div></div>
+<div class="hbar-value">{{ r.disp }}</div></div>
+{%- endfor -%}
+{%- else -%}<div class="nodata">no data in range</div>{%- endif -%}
+{%- endmacro -%}
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Weather-Adjusted Generation Analytics</title>
+<style>
+  :root {
+    --bg: #0f1115; --card: #171a21; --ink: #e6e9ef; --muted: #9aa4b2;
+    --accent: #5aa9e6; --accent2: #7ee0c0; --line: #262b34;
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--bg); color: var(--ink);
+    font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { padding: 24px 20px 8px; }
+  h1 { margin: 0; font-size: 20px; }
+  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
+  .wrap { padding: 12px 20px 48px; max-width: 1000px; margin: 0 auto; }
+  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
+  .controls label { color: var(--muted); font-size: 12px; display: flex;
+    flex-direction: column; gap: 4px; }
+  .controls select, .controls input {
+    background: var(--card); color: var(--ink); border: 1px solid var(--line);
+    border-radius: 6px; padding: 6px 8px; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+    gap: 12px; margin: 12px 0; }
+  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 14px 16px; }
+  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .04em; }
+  .kpi .value { font-size: 26px; font-weight: 600; margin-top: 6px; }
+  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
+    padding: 16px; margin: 12px 0; }
+  .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted);
+    text-transform: uppercase; letter-spacing: .04em; }
+  svg { width: 100%; height: auto; display: block; }
+  .hbar-row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center;
+    gap: 8px; margin: 6px 0; }
+  .hbar-track { background: var(--line); border-radius: 5px; height: 12px; overflow: hidden; }
+  .hbar-fill { background: var(--accent); height: 100%; }
+  .hbar-fill.solar { background: var(--accent2); }
+  .hbar-value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
+  .nodata { color: var(--muted); font-style: italic; }
+  .axis { display: flex; justify-content: space-between; color: var(--muted);
+    font-size: 11px; margin-top: 4px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Weather-Adjusted Generation Analytics</h1>
+  <div class="sub">
+    {{ manifest.date_range_start }} → {{ manifest.date_range_end }} ·
+    {{ manifest.asset_count }} assets · generated {{ manifest.generated_at }}
+  </div>
+</header>
+<div class="wrap">
+  <div class="controls">
+    <label>asset type
+      <select id="f-type">
+        <option value="">all</option>
+        <option value="wind">wind</option>
+        <option value="solar">solar</option>
+      </select>
+    </label>
+    <label>asset
+      <select id="f-asset">
+        <option value="">all</option>
+        {% for a in assets %}<option value="{{ a.asset_id }}">{{ a.display_name }}</option>{% endfor %}
+      </select>
+    </label>
+    <label>from<input type="date" id="f-start" value="{{ manifest.date_range_start }}" /></label>
+    <label>to<input type="date" id="f-end" value="{{ manifest.date_range_end }}" /></label>
+  </div>
+
+  <div class="kpis" id="kpis">
+    {% for k in kpis %}
+    <div class="kpi"><div class="label">{{ k.label }}</div>
+      <div class="value" data-kpi="{{ k.key }}">{{ k.value }}</div></div>
+    {% endfor %}
+  </div>
+
+  <div class="card"><h2>net generation (MWh)</h2>
+    <div id="chart-generation">{{ _line_svg(generation) }}</div></div>
+
+  <div class="card"><h2>capacity factor</h2>
+    <div id="chart-capacity_factor">{{ _line_svg(capacity_factor) }}</div></div>
+
+  <div class="card"><h2>weather-adjusted performance score</h2>
+    <div id="chart-performance">{{ _line_svg(performance) }}</div></div>
+
+  <div class="card"><h2>capacity factor by asset</h2>
+    <div id="chart-asset_bars">{{ _hbars_html(asset_bars, true) }}</div></div>
+
+  <div class="card"><h2>generation by type</h2>
+    <div id="chart-type_split">{{ _hbars_html(type_split, false) }}</div></div>
+</div>
+
+<script type="application/json" id="cockpit-data">{{ data_island | safe }}</script>
+<script>{{ app_js | safe }}</script>
+</body>
+</html>

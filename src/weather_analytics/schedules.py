@@ -1,12 +1,11 @@
 """Dagster schedules for the WAGA pipeline.
 
-Four schedules stagger execution so each pipeline stage completes
+Three schedules stagger execution so each pipeline stage completes
 before its downstream consumers are triggered:
 
 1. **Ingestion** — daily (yesterday's partition)
 2. **dbt transforms** — daily (after ingestion)
-3. **Dashboard export** — daily (after dbt, builds + publishes JSON)
-4. **Analytics** — weekly Monday
+3. **Analytics** — weekly Monday
 """
 
 from datetime import timedelta
@@ -60,16 +59,6 @@ waga_daily_dbt_schedule = ScheduleDefinition(
     name="waga_daily_dbt",
     target=AssetSelection.groups("default"),
     cron_schedule="0 7 * * *",
-    execution_timezone="UTC",
-)
-
-waga_daily_dashboard_schedule = ScheduleDefinition(
-    name="waga_daily_dashboard",
-    target=AssetSelection.assets(
-        "waga_dashboard_export_build",
-        "waga_dashboard_export_publish",
-    ),
-    cron_schedule="30 9 * * *",
     execution_timezone="UTC",
 )
 

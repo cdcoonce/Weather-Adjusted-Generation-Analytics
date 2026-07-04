@@ -1,19 +1,9 @@
-"""Dashboard export assets: build JSON from marts and publish to portfolio repo.
+"""Dashboard export asset: build JSON exports from marts.
 
-Two assets are defined here, split for clean separation of concerns:
-
-- ``waga_dashboard_export_build`` queries Snowflake marts, lowercases column
-  names (matching ``correlation.py:60-61``), projects to the UI subset, and
-  writes JSON files to a local directory.
-- ``waga_dashboard_export_publish`` reads the local JSON files and pushes
-  them to the portfolio repo via the GitHub Git Trees API in a single commit.
-
-Phase 1 builds a minimal tracer bullet: one JSON file with a small column
-subset. Phase 2 expands the projection to the full 15-column subset and
-adds the other three JSON files using the Git Trees API for a single commit.
-
-PyGithub debug logging is never enabled — that would leak the PAT in
-request headers. Do not change this.
+``waga_dashboard_export_build`` queries Snowflake marts, lowercases column
+names (matching ``correlation.py:60-61``), projects to the UI subset, and
+writes JSON files to a local directory for the static cockpit dashboard to
+render.
 """
 
 import json
@@ -29,20 +19,10 @@ from dagster import (
     Failure,
     MaterializeResult,
     MetadataValue,
-    RetryPolicy,
     asset,
 )
-from github import Github, InputGitTreeElement
-from github.GithubException import GithubException
 
-from weather_analytics.resources.portfolio_repo import PortfolioRepoResource
 from weather_analytics.resources.snowflake import WAGASnowflakeResource
-
-
-def _refresh_timestamp() -> str:
-    """Return an ISO 8601 UTC timestamp suffix for commit messages."""
-    return datetime.now(tz=UTC).strftime("%Y-%m-%dT%H:%M:%SZ")
-
 
 # ---------------------------------------------------------------------------
 # Constants
@@ -53,7 +33,6 @@ _SOURCE_MART = "WAGA.MARTS.mart_asset_performance_daily"
 _WEATHER_MART = "WAGA.MARTS.mart_asset_weather_performance"
 _EXPORT_DIR = Path("dashboard_exports")
 _SCHEMA_VERSION = "1.0"
-_HTTP_NOT_FOUND = 404
 
 _DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "asset_id",
@@ -104,7 +83,6 @@ _DAILY_PERFORMANCE_FILE = "daily_performance.json"
 _WEATHER_PERFORMANCE_FILE = "weather_performance.json"
 _ASSETS_FILE = "assets.json"
 _MANIFEST_FILE = "manifest.json"
-_REPO_DATA_DIR = "dashboard/data"
 
 
 # ===========================================================================
@@ -123,8 +101,8 @@ def waga_dashboard_export_build(
 ) -> MaterializeResult:
     """Query marts, project columns, write JSON files locally.
 
-    Downstream assets (``waga_dashboard_export_publish``) read the local
-    files and push them to the portfolio repo.
+    The static cockpit dashboard (``weather_analytics.cockpit``) reads these
+    local files to render and deploy the dashboard.
 
     Parameters
     ----------
@@ -334,125 +312,3 @@ def _to_json_records(df: pl.DataFrame) -> list[dict[str, Any]]:
         for c in cleaned.columns
     ]
     return cleaned.select(string_cols).to_dicts()
-
-
-# ===========================================================================
-# Publish asset: read local JSON, push to portfolio repo via Git Trees API
-# ===========================================================================
-
-
-@asset(
-    name="waga_dashboard_export_publish",
-    group_name="dashboard",
-    deps=["waga_dashboard_export_build"],
-    retry_policy=RetryPolicy(max_retries=2, delay=60),
-)
-def waga_dashboard_export_publish(
-    context: AssetExecutionContext,
-    portfolio_repo: PortfolioRepoResource,
-) -> MaterializeResult:
-    """Read local JSON files and push them to the portfolio repo.
-
-    Uses the GitHub Git Trees API via PyGithub to push all 4 files in a
-    single commit. This works from Dagster Cloud serverless because it's a
-    plain HTTPS request — no git clone or SSH required.
-
-    Parameters
-    ----------
-    context : AssetExecutionContext
-        Dagster execution context.
-    portfolio_repo : PortfolioRepoResource
-        Resource providing owner/name/branch/token for the portfolio repo.
-
-    Returns
-    -------
-    MaterializeResult
-        Metadata including commit SHA, byte sizes, and timestamps.
-
-    Raises
-    ------
-    dagster.Failure
-        If any file is missing locally or the GitHub API call fails.
-    """
-    files_to_push = {
-        _MANIFEST_FILE: _EXPORT_DIR / _MANIFEST_FILE,
-        _ASSETS_FILE: _EXPORT_DIR / _ASSETS_FILE,
-        _DAILY_PERFORMANCE_FILE: _EXPORT_DIR / _DAILY_PERFORMANCE_FILE,
-        _WEATHER_PERFORMANCE_FILE: _EXPORT_DIR / _WEATHER_PERFORMANCE_FILE,
-    }
-
-    missing = [n for n, p in files_to_push.items() if not p.exists()]
-    if missing:
-        raise Failure(
-            description=f"Missing local files from build asset: {missing}",
-        )
-
-    gh = Github(portfolio_repo.token)
-    try:
-        repo = gh.get_repo(portfolio_repo.full_name)
-    except GithubException as exc:
-        raise Failure(
-            description=(
-                f"Failed to access portfolio repo {portfolio_repo.full_name}: "
-                f"HTTP {exc.status}. Check PAT scope and repo name."
-            ),
-        ) from exc
-
-    try:
-        ref = repo.get_git_ref(f"heads/{portfolio_repo.branch}")
-        head_commit = repo.get_git_commit(ref.object.sha)
-
-        blobs = []
-        total_bytes = 0
-        for rel_name, local_path in files_to_push.items():
-            content = local_path.read_text(encoding="utf-8")
-            total_bytes += len(content)
-            blob = repo.create_git_blob(content, "utf-8")
-            blobs.append(
-                InputGitTreeElement(
-                    path=f"{_REPO_DATA_DIR}/{rel_name}",
-                    mode="100644",
-                    type="blob",
-                    sha=blob.sha,
-                )
-            )
-
-        new_tree = repo.create_git_tree(blobs, head_commit.tree)
-        try:
-            run_id_pub: str = context.run.run_id
-        except (AttributeError, DagsterError):
-            run_id_pub = "unknown"
-        date_str = datetime.now(tz=UTC).strftime("%Y-%m-%d")
-        commit_message = (
-            f"chore(dashboard): refresh data {date_str} [pipeline run {run_id_pub}]"
-        )
-        new_commit = repo.create_git_commit(
-            message=commit_message,
-            tree=new_tree,
-            parents=[head_commit],
-        )
-        ref.edit(sha=new_commit.sha)
-        commit_sha = new_commit.sha
-
-    except GithubException as exc:
-        raise Failure(
-            description=(
-                f"Failed to push dashboard data to "
-                f"{portfolio_repo.full_name}: HTTP {exc.status}"
-            ),
-        ) from exc
-
-    context.log.info("Pushed 4 files in single commit %s", commit_sha)
-
-    return MaterializeResult(
-        metadata={
-            "commit_sha": commit_sha,
-            "commit_url": MetadataValue.url(
-                f"https://github.com/{portfolio_repo.full_name}/commit/{commit_sha}"
-            ),
-            "total_bytes": total_bytes,
-            "file_count": len(files_to_push),
-            "repo": portfolio_repo.full_name,
-            "branch": portfolio_repo.branch,
-        },
-    )
