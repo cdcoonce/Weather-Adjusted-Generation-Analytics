@@ -1,109 +1,166 @@
-# WAGA Static Dashboard — Design (in progress)
+# WAGA Static Dashboard — Design
 
 **Date:** 2026-07-04
-**Status:** DESIGN — awaiting resolution of 2 open questions (see end), then spec finalize → writing-plans.
-**Context:** written just before a `/compact`, to preserve the brainstorming state.
+**Status:** DESIGN — finalized. Both open questions resolved (standalone CLI; plan
+creates the Cloudflare Pages project). Ready for user review → writing-plans.
 
 ## Goal
 
-Replace WAGA's heavy client-side **Panel + Pyodide** dashboard (`src/weather_analytics/dashboard/`)
-with a **static, server-rendered dashboard** in the style of `afk-cockpit`, deployed to its **own
-Cloudflare Pages project** (`*.pages.dev`). Public (privacy is not blocking — confirmed).
+Replace WAGA's client-side **Panel + Bokeh + Pyodide** dashboard
+(`src/weather_analytics/dashboard/`) with a **static, server-rendered dashboard** in the
+style of `afk-cockpit`, deployed to its **own Cloudflare Pages project** (`*.pages.dev`).
+Public (privacy is not blocking — confirmed). This also retires the stale
+push-to-portfolio-`master` publish path that motivated re-hosting in the first place.
 
-## Decisions locked (from brainstorming Q&A)
+## Decisions locked
 
-1. **Hosting:** its own Cloudflare Pages project via `wrangler pages deploy` (mirrors
-   `afk-cockpit/src/afk_cockpit/cloudflare.py`). Not a portfolio subpath. The portfolio WAGA
-   project card's `href` is repointed to the new `*.pages.dev` URL.
-2. **Interactivity:** *static + light interactivity*. Server-rendered default view, plus a small
-   vanilla-JS layer over a baked-in JSON data island — an **asset/type filter** (wind/solar/individual)
-   and a **date-range** toggle that recompute KPIs and redraw the SVG charts client-side. No runtime,
-   single self-contained file.
-3. **Pattern:** afk-cockpit's `charts → render` approach — inline SVG/CSS geometry generated in
-   Python (NO chart library, NO Plotly, NO Pyodide), Jinja2 template → one self-contained
-   `dist/index.html` (~afk-cockpit is 46 KB).
+1. **Hosting:** its own Cloudflare Pages project via `npx --yes wrangler pages deploy`,
+   mirroring `afk-cockpit/src/afk_cockpit/cloudflare.py` exactly. Not a portfolio subpath.
+   The portfolio WAGA project-card `href` is repointed to the new `*.pages.dev` URL.
+2. **Interactivity:** *static + light interactivity*. Server-rendered default view, plus a
+   small vanilla-JS layer over a baked-in JSON data island — an **asset-type/individual-asset
+   filter** and a **date-range** toggle that recompute KPIs and redraw the SVG charts
+   client-side. No runtime, single self-contained file.
+3. **Pattern:** afk-cockpit's `data → charts → render` approach — inline SVG/CSS geometry
+   generated in Python (NO chart library, NO Bokeh, NO Pyodide), Jinja2 template → one
+   self-contained `dist/index.html`.
+4. **Orchestration (RESOLVED):** cockpit is a **standalone module + CLI**
+   (`build`/`deploy`/`serve`), NOT a Dagster asset — mirroring afk-cockpit and household-bms,
+   which both keep the dashboard standalone precisely so render/serve need no Dagster context.
+   The daily launchd chain runs it as plain steps *after* the Dagster export asset.
+5. **Cloudflare setup (RESOLVED):** WAGA has **no** existing CF Pages project, `wrangler.toml`,
+   or `CLOUDFLARE_API_TOKEN` (verified — the only cloudflare reference in the repo is this
+   design doc). The implementation therefore **creates** the Pages project and wires
+   `CLOUDFLARE_API_TOKEN` + `CLOUDFLARE_ACCOUNT_ID` into `.env` (both read automatically by
+   `wrangler`). Creating the CF token/project in the Cloudflare dashboard is a **gated step for
+   Charles**; the plan documents it and everything else is code.
+
+## Prerequisite / sequencing (IMPORTANT)
+
+The deploy step is appended to `scripts/run_scheduled.py`, which exists **only** on
+`feat/local-launchd-scheduling` (Thread 1 — done, foreground-tested green on WAGA daily, but
+**unmerged**; `main` and this design's `feat/static-dashboard` branch do not have it). So the
+Thread 2 implementation branch must be **based on `feat/local-launchd-scheduling`** (or that
+branch is merged to `main` first, then Thread 2 branches from `main`). Merging Thread 1 is a
+gated step for Charles. Recommended order: merge Thread 1 → branch Thread 2 from `main`.
 
 ## Reference: afk-cockpit (the template to mirror)
 
-Repo: `/Users/cdcoonce/Developer/GitHub/afk-cockpit`. Modules:
-`ingest → enrich → marts → charts → render → publish/cloudflare`, plus `cli.py`, `serve.py`,
-`config.py`. `charts.py` returns SVG path strings / polyline points / bar geometry; `render.py`
-fills `templates/index.html.j2` into a single static `dist/index.html`; `cloudflare.py` runs
-`wrangler pages deploy dist --branch main`. Full pytest suite (`test_charts`, `test_render`,
-`test_publish`, `test_cloudflare`, `test_serve`, `test_cli`, ...).
+Repo: `/Users/cdcoonce/Developer/GitHub/afk-cockpit`. `charts.py` returns SVG path strings /
+polyline points / bar geometry; `render.py` fills `templates/index.html.j2` into a single
+static `dist/index.html`; `cloudflare.py` runs
+`npx --yes wrangler pages deploy <dir> --project-name <name> --branch main --commit-dirty=true`
+(uses `npx`, not bare `wrangler`, because launchd's minimal PATH won't resolve a global
+install). Full pytest suite (`test_charts`, `test_render`, `test_cloudflare`, `test_serve`,
+`test_cli`, ...).
 
-## WAGA data contract (the 4 export JSONs, already produced by `waga_dashboard_export_build`)
+## WAGA data contract (the 4 export JSONs)
 
-Source: `dashboard_exports/*.json` (from Snowflake MARTS via the existing Dagster export asset).
+Produced by the existing Dagster asset **`waga_dashboard_export_build`** in
+`src/weather_analytics/assets/analytics/dashboard_export.py` (queries
+`WAGA.MARTS.mart_asset_performance_daily` and `WAGA.MARTS.mart_asset_weather_performance`,
+lowercases columns, writes to `dashboard_exports/`). This asset is **kept** — it is the whole
+interface between the pipeline and the static renderer. NaN → `null`; dates → ISO strings.
 
-- `manifest.json` — `{generated_at, pipeline_run_id, date_range:{start,end}, asset_count, row_counts, schema_version}`
-- `assets.json` — list of 10 `{asset_id, capacity_mw, size_category, asset_type: wind|solar, display_name}`
-- `daily_performance.json` — ~710 rows `{asset_id, date, total_net_generation_mwh, daily_capacity_factor, avg_availability_pct, total_curtailment_mwh, ...}`
-- `weather_performance.json` — ~640 rows `{asset_id, date, performance_score, performance_category, avg_expected_generation_mwh, avg_actual_generation_mwh, ...}`
+- **`manifest.json`** — `generated_at`, `pipeline_run_id`, `date_range:{start,end}`,
+  `asset_count`, `row_counts:{daily_performance,weather_performance}`, `schema_version` ("1.0")
+- **`assets.json`** — array of `{asset_id, capacity_mw, size_category, asset_type (wind|solar),
+  display_name}`
+- **`daily_performance.json`** — array (asset-date), 15 fields: `asset_id`, `date`,
+  `total_net_generation_mwh`, `daily_capacity_factor`, `avg_availability_pct`,
+  `total_curtailment_mwh`, `daily_performance_rating`, `excellent_hours`, `good_hours`,
+  `fair_hours`, `poor_hours`, `avg_wind_speed_mps`, `avg_ghi`, `avg_temperature_c`,
+  `data_completeness_pct`
+- **`weather_performance.json`** — array (asset-date), 12 fields: `asset_id`, `date`,
+  `performance_score`, `performance_category`, `avg_expected_generation_mwh`,
+  `avg_actual_generation_mwh`, `avg_performance_ratio_pct`, `wind_r_squared`,
+  `solar_r_squared`, `inferred_asset_type`, `rolling_7d_avg_cf`, `rolling_30d_avg_cf`
 
 ## Proposed architecture
 
-New module `src/weather_analytics/cockpit/` replacing `src/weather_analytics/dashboard/`:
+New standalone module `src/weather_analytics/cockpit/` (mirrors afk-cockpit's module layout):
 
-- `data.py` — load + normalize the 4 export JSONs into typed structures (Polars or plain dicts).
+- `data.py` — load + normalize the 4 export JSONs into typed structures (plain dataclasses /
+  dicts; no Snowflake, no Dagster).
 - `charts.py` — pure functions → inline-SVG geometry + KPI aggregates: fleet capacity factor,
-  total net generation, avg weather-adjusted performance score, total curtailment; time-series
-  polyline/area for generation & capacity factor; per-asset bars; wind-vs-solar split.
-- `render.py` + `templates/index.html.j2` — Jinja → self-contained `dist/index.html`; embeds the
-  full dataset as a `<script type="application/json">` island and server-renders the default view.
-- `static/app.js` (inlined at build) — vanilla JS: on filter/date-range change, recompute KPIs and
-  redraw the SVG charts from the baked JSON.
-- `deploy.py` — `wrangler pages deploy dist --project-name <waga>` (mirrors afk-cockpit cloudflare.py).
-- CLI: `python -m weather_analytics.cockpit build|deploy|serve`.
+  total net generation, avg weather-adjusted `performance_score`, total curtailment;
+  time-series polyline/area for generation & capacity factor; per-asset bars; wind-vs-solar
+  split.
+- `render.py` + `templates/index.html.j2` — Jinja → self-contained `dist/index.html`; embeds
+  the full dataset as a `<script type="application/json">` island and server-renders the
+  default view.
+- `static/app.js` (inlined at build) — vanilla JS: on filter/date-range change, recompute KPIs
+  and redraw the SVG charts from the baked JSON.
+- `cloudflare.py` — `deploy(dist_dir, project_name)` running `npx --yes wrangler pages deploy`
+  (copied from afk-cockpit, `DEFAULT_PROJECT_NAME = "waga-dashboard"`).
+- `serve.py` — local static server for `dist/` (dev preview, mirrors afk-cockpit).
+- `config.py` — project name / paths.
+- `cli.py` + `__main__.py` — `python -m weather_analytics.cockpit build|deploy|serve`.
 
-**Data flow:** Snowflake marts → `waga_dashboard_export_build` (existing) writes the 4 JSONs →
-cockpit `render` → `dist/index.html` → `wrangler` → `*.pages.dev`.
+**Data flow:** Snowflake marts → `waga_dashboard_export_build` (Dagster, existing) writes the
+4 JSONs → `cockpit build` renders `dist/index.html` → `cockpit deploy` (`wrangler`) →
+`*.pages.dev`.
 
-**Views (mirror the current Panel dashboard, static):** fleet KPI header; generation-trend chart;
-capacity-factor + weather-adjusted-performance charts; per-asset table; filter controls
+**Views (mirror the current Panel dashboard, static):** fleet KPI header; generation-trend
+chart; capacity-factor + weather-adjusted-performance charts; per-asset table; filter controls
 (asset type, individual asset, date range).
+
+## Orchestration — the daily launchd chain
+
+Re-enable the dashboard step deferred in Thread 1, now targeting Cloudflare. Append to the
+`daily` job in `scripts/run_scheduled.py` (currently `[ingestion, dbt]`) so it becomes, in
+order:
+
+1. `dagster asset materialize --select waga_weather_ingestion,waga_generation_ingestion --partition <yesterday>` *(existing)*
+2. `dagster asset materialize --select group:default` *(existing — dbt marts)*
+3. `dagster asset materialize --select waga_dashboard_export_build` *(re-enabled: build only, writes the 4 JSONs)*
+4. `python -m weather_analytics.cockpit build` *(new: JSONs → dist/index.html)*
+5. `python -m weather_analytics.cockpit deploy` *(new: wrangler → pages.dev)*
+
+Steps 1–3 stay `uv run python -m dagster ...` (the module form Thread 1 standardized on).
+Deploy stays a plain CLI step so the pipeline carries no deploy credentials beyond the two CF
+env vars `wrangler` reads. Auto-refreshes as the data refreshes.
 
 ## Removals / migration
 
-- Delete `src/weather_analytics/dashboard/` (Panel/Pyodide) and its components.
-- Drop the `dashboard` optional-deps extra (panel/bokeh/pyodide) from `pyproject.toml`.
-- Retire `scripts/build_dashboard_app.py`, `scripts/push_dashboard_build.py`, and
-  `.github/workflows/build-dashboard.yml` (the stale portfolio-`master` push path — the bug that
-  motivated re-pointing hosting to Cloudflare in the first place).
-- Repoint the portfolio `Weather-Adjusted Generation Analytics` project card `href` → new pages.dev URL
-  (in `Portfolio_Website` `src/data/portfolio.js`; currently cockpit-slug `waga`).
+- **Delete** `src/weather_analytics/dashboard/` entirely (Panel/Bokeh/Pyodide): `__init__.py`,
+  `app.py`, `theme.py`, `data_loader.py`, `static/`, and
+  `components/{_chart_helpers,asset_view,filters,fleet_view,kpi_cards,weather_view}.py`.
+- **Remove** the `waga_dashboard_export_publish` asset (in `dashboard_export.py`) — it pushes
+  the JSONs to the portfolio repo via the GitHub Trees API, obsolete once we deploy to
+  Cloudflare. **Keep** `waga_dashboard_export_build`. Also drop the now-unused
+  `PortfolioRepoResource` (used only by the publish asset) and its wiring in the Dagster
+  `Definitions`, so nothing references the dead resource.
+- **Remove** the old Dagster-Cloud `waga_daily_dashboard_schedule` from
+  `src/weather_analytics/schedules.py` (it selects the now-deleted publish asset, so it would
+  break `dagster definitions validate` otherwise). Thread 1 already retired the Dagster-Cloud
+  scheduler in favor of launchd; this removes the last dangling reference.
+- **Retire** `scripts/build_dashboard_app.py`, `scripts/push_dashboard_build.py`, and
+  `.github/workflows/build-dashboard.yml` (the stale push-to-portfolio-`master` path).
+- **Drop** the `dashboard` optional-deps extra from `pyproject.toml` (currently
+  `dashboard = ["panel>=1.6.0,<1.7.0", "bokeh>=3.5.0,<3.8.0"]`).
+- **Dead env keys:** `WAGA_PORTFOLIO_REPO_{OWNER,NAME,BRANCH,TOKEN}` become unused once
+  `waga_dashboard_export_publish` is gone — remove from `.env.example` (and note in `.env`).
+- **Add env keys:** `CLOUDFLARE_API_TOKEN`, `CLOUDFLARE_ACCOUNT_ID` to `.env.example` (+ real
+  values in gitignored `.env`).
+- **Repoint** the portfolio `Weather-Adjusted Generation Analytics` project-card `href` → new
+  `*.pages.dev` URL (in `Portfolio_Website` `src/data/portfolio.js`; currently cockpit-slug
+  `waga`). The portfolio card keeps its cockpit-SVG hero; only the link target changes.
 
 ## Testing (mirror afk-cockpit)
 
-pytest: `charts` (geometry + KPI math), `render` (expected sections present, valid HTML, data island
-embedded), `data` (JSON parse/normalize), `deploy` (wrangler argv construction, mocked — no real deploy).
+pytest under `tests/`:
 
-## Orchestration — RECOMMENDATION (confirm)
+- `test_data` — JSON parse/normalize; missing-field & empty-dataset handling.
+- `test_charts` — geometry (SVG path/point strings) + KPI math on fixture data.
+- `test_render` — expected sections present, valid/parseable HTML, data island embedded,
+  single self-contained file (no external asset refs).
+- `test_cloudflare` — `wrangler` argv construction with a mocked runner (no real deploy).
+- `test_cli` / `test_serve` — subcommand dispatch; local server returns `dist/index.html`.
 
-Make **render** a Dagster asset (`waga_dashboard_render`, replacing the old `waga_dashboard_export_publish`)
-wired into the **daily launchd chain** (re-enabling the dashboard step deferred in Thread 1, now
-targeting Cloudflare instead of the stale portfolio `master`). Keep **deploy** as a separate
-`wrangler` step/CLI so the pipeline doesn't carry deploy credentials. Auto-refreshes as the data
-refreshes.
+Fixture: a trimmed copy of the 4 JSONs (a few assets × a few dates) committed under
+`tests/fixtures/`.
 
-## OPEN QUESTIONS (resolve after /compact, before finalizing spec)
+## Open questions
 
-1. **Orchestration** — approve the recommendation above (render = Dagster asset in the daily chain;
-   deploy = separate wrangler step), or prefer a fully standalone afk-cockpit-style CLI outside Dagster?
-2. **Cloudflare setup** — is there already a CF Pages project + `CLOUDFLARE_API_TOKEN` for WAGA, or
-   should the implementation plan include creating the Pages project and wiring the token into `.env`?
-
-## Prior-thread context (for a post-compact session)
-
-- **Thread 1 (launchd scheduling) — DONE, committed, NOT merged, NOT loaded.** Branch
-  `feat/local-launchd-scheduling` in **both** WAGA (`1dbe790`) and `oura-pipeline` (`289cdbe`):
-  `scripts/run_scheduled.py` + `scripts/install_launchd.py` + `docs/local-scheduling.md`, Dagster
-  Cloud CI neutered to `workflow_dispatch`-only. WAGA daily was **foreground-tested green** (real
-  Snowflake write, data refreshed to 2026-07-03). **Oura NOT foreground-tested** — may hide an
-  `.env`-drift gap (WAGA's run surfaced missing `WAGA_DLT_*`; Oura only had `DAGSTER_HOME` +
-  `SNOWFLAKE_DATABASE` fixed so far). launchd agents are **not loaded** — `install_launchd.py
-  install --load` is the user's gated step. Oura has **pre-existing March uncommitted work**
-  (`CLAUDE.md`, `docs/archive/*`) deliberately left unstaged.
-- **Portfolio (charleslikesdata.com):** already updated + shipped to production this session
-  (gallery restore, Work filtering, Contact rework). The WAGA card currently renders a cockpit SVG
-  (slug `waga`) and links to the GitHub repo; this design repoints it to the pages.dev dashboard.
+None — both resolved (see Decisions locked #4 and #5).
