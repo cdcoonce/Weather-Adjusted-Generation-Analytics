@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from weather_analytics.cockpit.cli import main
 
 FIXTURES = Path(__file__).parent / "fixtures"
@@ -18,7 +20,9 @@ def test_build_writes_index(tmp_path):
 def test_deploy_calls_cloudflare(monkeypatch, tmp_path):
     seen = {}
 
-    def fake_deploy(dist_dir, project_name="waga-dashboard", branch="main", runner=None):
+    def fake_deploy(
+        dist_dir, project_name="waga-dashboard", branch="main", runner=None
+    ):
         seen["dist"] = str(dist_dir)
         seen["project"] = project_name
         return "deployed"
@@ -31,7 +35,5 @@ def test_deploy_calls_cloudflare(monkeypatch, tmp_path):
 
 
 def test_unknown_command_errors():
-    import pytest
-
     with pytest.raises(SystemExit):
         main(["frobnicate"])

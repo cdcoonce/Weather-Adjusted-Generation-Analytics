@@ -42,8 +42,9 @@ dbt/renewable_dbt/profiles/.user.yml
 data/raw/weather/*.parquet
 data/raw/generation/*.parquet
 
-# Dashboard export + build output (regenerated on every pipeline / CI run)
+# Dashboard export output (regenerated on every pipeline / CI run)
 dashboard_exports/
+# Retired Panel/Pyodide build output — build script deleted; ignore any leftovers.
 dashboard_build/
 
 # Jupyter

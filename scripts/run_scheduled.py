@@ -77,10 +77,11 @@ UV = shutil.which("uv") or str(Path.home() / ".local/bin/uv")
 # ``uv run dagster <argv...>`` from the repo root, in order; a non-zero exit
 # aborts the remainder of the chain.
 #
-# NOTE: the dashboard-export assets (waga_dashboard_export_build /
-# waga_dashboard_export_publish) are DELIBERATELY EXCLUDED here. They publish
-# to a stale portfolio 'master' target and are deferred to a separate thread;
-# do not add them back without re-pointing that target first.
+# NOTE: the daily chain ends by (1) materializing waga_dashboard_export_build,
+# which writes the 4 JSON exports to dashboard_exports/, then (2) running the
+# cockpit build + deploy POST_STEPS below to render and publish the static
+# dashboard to Cloudflare Pages. The old waga_dashboard_export_publish asset
+# (push to a stale portfolio 'master') was removed with the Pyodide dashboard.
 JOBS: dict[str, list[list[str]]] = {
     "daily": [
         [
@@ -101,6 +102,14 @@ JOBS: dict[str, list[list[str]]] = {
             "-m",
             MODULE,
         ],
+        [
+            "asset",
+            "materialize",
+            "--select",
+            "waga_dashboard_export_build",
+            "-m",
+            MODULE,
+        ],
     ],
     "weekly": [
         [
@@ -111,6 +120,17 @@ JOBS: dict[str, list[list[str]]] = {
             "-m",
             MODULE,
         ],
+    ],
+}
+
+# Post-Dagster steps: full argv lists run verbatim (NOT wrapped in dagster).
+# For `daily`, render the static dashboard from the fresh JSON exports and
+# deploy it to Cloudflare Pages. wrangler reads CLOUDFLARE_* from the env that
+# load_dotenv() populated above.
+POST_STEPS: dict[str, list[list[str]]] = {
+    "daily": [
+        [UV, "run", "python", "-m", "weather_analytics.cockpit", "build"],
+        [UV, "run", "python", "-m", "weather_analytics.cockpit", "deploy"],
     ],
 }
 
@@ -172,6 +192,18 @@ def main() -> int:
                 return result.returncode
 
         emit("=== all steps succeeded ===")
+
+        post_steps = POST_STEPS.get(args.job, [])
+        for index, cmd in enumerate(post_steps, start=1):
+            emit(f"--- post-step {index}/{len(post_steps)}: {' '.join(cmd)} ---")
+            result = subprocess.run(  # noqa: PLW1510 - returncode handled below
+                cmd, cwd=REPO, stdout=log, stderr=subprocess.STDOUT
+            )
+            log.flush()
+            if result.returncode != 0:
+                emit(f"POST-STEP FAILED (exit {result.returncode}) on step {index}")
+                return result.returncode
+        emit("=== all post-steps succeeded ===")
         return 0
 
 

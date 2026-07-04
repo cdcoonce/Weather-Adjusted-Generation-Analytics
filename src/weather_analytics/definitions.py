@@ -12,7 +12,6 @@ from dagster_dbt import DbtCliResource
 from weather_analytics.assets.analytics import (
     waga_correlation_analysis,
     waga_dashboard_export_build,
-    waga_dashboard_export_publish,
 )
 from weather_analytics.assets.dbt_assets import (
     DBT_PROFILES_DIR,
@@ -24,7 +23,6 @@ from weather_analytics.assets.ingestion import (
     waga_weather_ingestion,
 )
 from weather_analytics.checks import (
-    waga_dashboard_export_commit_landed,
     waga_generation_freshness_check,
     waga_generation_value_range_check,
     waga_mart_correlation_row_count_check,
@@ -35,10 +33,8 @@ from weather_analytics.checks import (
     waga_weather_value_range_check,
 )
 from weather_analytics.resources.dlt_resource import DltIngestionResource
-from weather_analytics.resources.portfolio_repo import PortfolioRepoResource
 from weather_analytics.resources.snowflake import WAGASnowflakeResource
 from weather_analytics.schedules import (
-    waga_daily_dashboard_schedule,
     waga_daily_dbt_schedule,
     waga_daily_ingestion_schedule,
     waga_weekly_analytics_schedule,
@@ -53,7 +49,6 @@ defs = Definitions(
             waga_dbt_assets,
             waga_correlation_analysis,
             waga_dashboard_export_build,
-            waga_dashboard_export_publish,
         ]
         if asset is not None
     ],
@@ -66,12 +61,10 @@ defs = Definitions(
         waga_mart_correlation_row_count_check,
         waga_weather_value_range_check,
         waga_generation_value_range_check,
-        waga_dashboard_export_commit_landed,
     ],
     schedules=[
         waga_daily_ingestion_schedule,
         waga_daily_dbt_schedule,
-        waga_daily_dashboard_schedule,
         waga_weekly_analytics_schedule,
     ],
     resources={
@@ -92,12 +85,6 @@ defs = Definitions(
             snowflake_warehouse=EnvVar("WAGA_SNOWFLAKE_WAREHOUSE"),
             snowflake_database=EnvVar("WAGA_SNOWFLAKE_DATABASE"),
             snowflake_role=EnvVar("WAGA_SNOWFLAKE_ROLE"),
-        ),
-        "portfolio_repo": PortfolioRepoResource(
-            owner=EnvVar("WAGA_PORTFOLIO_REPO_OWNER"),
-            name=EnvVar("WAGA_PORTFOLIO_REPO_NAME"),
-            branch=EnvVar("WAGA_PORTFOLIO_REPO_BRANCH"),
-            token=EnvVar("WAGA_PORTFOLIO_REPO_TOKEN"),
         ),
         "dbt": DbtCliResource(
             project_dir=DBT_PROJECT_DIR,

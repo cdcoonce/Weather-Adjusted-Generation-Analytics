@@ -9,7 +9,6 @@ from unittest.mock import MagicMock, patch
 import polars as pl
 import pytest
 from dagster import AssetKey, Failure, build_asset_context
-from github.GithubException import GithubException
 
 from weather_analytics.assets.analytics.dashboard_export import (
     _ASSETS_FILE,
@@ -21,15 +20,12 @@ from weather_analytics.assets.analytics.dashboard_export import (
     _WEATHER_PERFORMANCE_FILE,
     _to_json_records,
     waga_dashboard_export_build,
-    waga_dashboard_export_publish,
 )
 
 # _ASSET_DIM_COLUMNS was removed in Phase 2 — asset dim is built by joining
 # both marts.  Tests use the concrete mart column names instead.
 
 _EXPECTED_NAN_ROWS = 2
-_HTTP_FORBIDDEN = 403
-_HTTP_NOT_FOUND = 404
 _EXPECTED_FILE_COUNT = 4
 
 
@@ -266,176 +262,3 @@ def test_to_json_records_handles_dates_and_nan() -> None:
     assert reloaded[0]["date"] == "2026-04-10"
     # NaN becomes None -> null in JSON
     assert reloaded[1]["total_net_generation_mwh"] is None
-
-
-# ===========================================================================
-# waga_dashboard_export_publish
-# ===========================================================================
-
-
-def _make_mock_portfolio_repo() -> MagicMock:
-    mock_repo_resource = MagicMock()
-    mock_repo_resource.owner = "cdcoonce"
-    mock_repo_resource.name = "charleslikesdata"
-    mock_repo_resource.branch = "main"
-    mock_repo_resource.token = "fake-pat"
-    mock_repo_resource.full_name = "cdcoonce/charleslikesdata"
-    return mock_repo_resource
-
-
-def _make_mock_repo_with_git_trees() -> MagicMock:
-    """Return a mock GitHub repo pre-configured for Git Trees API calls."""
-    mock_repo = MagicMock()
-    mock_ref = MagicMock()
-    mock_ref.object.sha = "head-sha"
-    mock_repo.get_git_ref.return_value = mock_ref
-    mock_head_commit = MagicMock()
-    mock_head_commit.tree = MagicMock()
-    mock_repo.get_git_commit.return_value = mock_head_commit
-    mock_blob = MagicMock()
-    mock_blob.sha = "blob-sha"
-    mock_repo.create_git_blob.return_value = mock_blob
-    mock_repo.create_git_tree.return_value = MagicMock()
-    mock_new_commit = MagicMock()
-    mock_new_commit.sha = "new-commit-sha"
-    mock_repo.create_git_commit.return_value = mock_new_commit
-    return mock_repo
-
-
-def _write_all_four_files(exports: Path) -> None:
-    """Write the 4 expected export files to a tmp exports directory."""
-    (exports / _DAILY_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
-    (exports / _WEATHER_PERFORMANCE_FILE).write_text('[{"asset_id": "a"}]')
-    (exports / _ASSETS_FILE).write_text('[{"asset_id": "a"}]')
-    (exports / _MANIFEST_FILE).write_text('{"schema_version": "1.0"}')
-
-
-@pytest.mark.unit
-def test_publish_raises_failure_when_local_file_missing(
-    tmp_path: Path,
-) -> None:
-    """If the build asset didn't run, publish must fail loudly."""
-    empty_exports = tmp_path / "exports"
-    empty_exports.mkdir()
-    mock_repo_resource = _make_mock_portfolio_repo()
-    context = build_asset_context()
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            empty_exports,
-        ),
-        pytest.raises(Failure, match=r"(?i)missing"),
-    ):
-        waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-
-@pytest.mark.unit
-def test_publish_single_commit_for_all_four_files(tmp_path: Path) -> None:
-    """Git Trees API: one commit, 4 blobs, ref updated with new SHA."""
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    _write_all_four_files(exports)
-
-    mock_repo_resource = _make_mock_portfolio_repo()
-    mock_repo = _make_mock_repo_with_git_trees()
-    mock_gh = MagicMock()
-    mock_gh.get_repo.return_value = mock_repo
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            exports,
-        ),
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export.Github",
-            return_value=mock_gh,
-            create=True,
-        ),
-    ):
-        context = build_asset_context()
-        result = waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-    # Single commit
-    mock_repo.create_git_commit.assert_called_once()
-    # one blob per file
-    assert mock_repo.create_git_blob.call_count == _EXPECTED_FILE_COUNT
-    # ref updated with the new commit SHA
-    mock_repo.get_git_ref.return_value.edit.assert_called_once_with(
-        sha="new-commit-sha"
-    )
-    assert result.metadata is not None
-    assert result.metadata["commit_sha"] == "new-commit-sha"
-
-
-@pytest.mark.unit
-def test_publish_raises_failure_on_api_error(tmp_path: Path) -> None:
-    """get_git_ref raising GithubException must raise Failure."""
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    _write_all_four_files(exports)
-
-    mock_repo_resource = _make_mock_portfolio_repo()
-    mock_repo = MagicMock()
-    mock_repo.get_git_ref.side_effect = GithubException(status=500, data={})
-    mock_gh = MagicMock()
-    mock_gh.get_repo.return_value = mock_repo
-    context = build_asset_context()
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            exports,
-        ),
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export.Github",
-            return_value=mock_gh,
-            create=True,
-        ),
-        pytest.raises(Failure, match="HTTP 500"),
-    ):
-        waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-
-@pytest.mark.unit
-def test_publish_raises_failure_on_repo_not_found(tmp_path: Path) -> None:
-    """If the PAT can't access the repo at all, fail with a clear message."""
-    exports = tmp_path / "exports"
-    exports.mkdir()
-    _write_all_four_files(exports)
-
-    mock_repo_resource = _make_mock_portfolio_repo()
-    mock_gh = MagicMock()
-    mock_gh.get_repo.side_effect = GithubException(status=_HTTP_NOT_FOUND, data={})
-    context = build_asset_context()
-
-    with (
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
-            exports,
-        ),
-        patch(
-            "weather_analytics.assets.analytics.dashboard_export.Github",
-            return_value=mock_gh,
-            create=True,
-        ),
-        pytest.raises(Failure, match="Failed to access portfolio repo"),
-    ):
-        waga_dashboard_export_publish(
-            context=context, portfolio_repo=mock_repo_resource
-        )
-
-
-@pytest.mark.unit
-def test_publish_asset_key_and_group() -> None:
-    asset_key = next(iter(waga_dashboard_export_publish.keys))
-    assert asset_key == AssetKey(["waga_dashboard_export_publish"])
-    assert (
-        waga_dashboard_export_publish.group_names_by_key.get(asset_key) == "dashboard"
-    )
