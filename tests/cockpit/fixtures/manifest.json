@@ -1,0 +1,8 @@
+{
+  "generated_at": "2026-07-03T06:15:00Z",
+  "pipeline_run_id": "run-abc-123",
+  "date_range": {"start": "2026-07-01", "end": "2026-07-02"},
+  "asset_count": 2,
+  "row_counts": {"daily_performance": 4, "weather_performance": 4},
+  "schema_version": "1.0"
+}

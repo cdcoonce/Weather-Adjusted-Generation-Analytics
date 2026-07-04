@@ -1,0 +1,4 @@
+[
+  {"asset_id": "W1", "capacity_mw": 100.0, "size_category": "large", "asset_type": "wind", "display_name": "Wind Asset W1 (100.0 MW)"},
+  {"asset_id": "S1", "capacity_mw": 50.0, "size_category": "medium", "asset_type": "solar", "display_name": "Solar Asset S1 (50.0 MW)"}
+]
