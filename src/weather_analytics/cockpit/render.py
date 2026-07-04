@@ -16,6 +16,13 @@ _env = Environment(
     autoescape=select_autoescape(),
 )
 
+_STATIC_DIR = Path(__file__).parent / "static"
+
+
+def _bundled_app_js() -> str:
+    path = _STATIC_DIR / "app.js"
+    return path.read_text(encoding="utf-8") if path.exists() else ""
+
 
 def _safe(fn: Callable[[], object], default: object) -> object:
     """Render one chart defensively — a single bad chart can't abort the page."""
@@ -31,7 +38,11 @@ def _json_island(raw: dict) -> str:
     return json.dumps(raw, separators=(",", ":")).replace("</", "<\\/")
 
 
-def render_dashboard(dataset: Dataset, out_path: Path, app_js: str = "") -> None:
+def render_dashboard(
+    dataset: Dataset, out_path: Path, app_js: str | None = None
+) -> None:
+    if app_js is None:
+        app_js = _bundled_app_js()
     out_path = Path(out_path)
     context = {
         "manifest": dataset.manifest,

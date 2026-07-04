@@ -31,6 +31,14 @@ def test_render_inlines_app_js(dataset, tmp_path):
     assert "/*APPJS_MARKER*/" in html
 
 
+def test_render_defaults_to_bundled_app_js(dataset, tmp_path):
+    out = tmp_path / "index.html"
+    render_dashboard(dataset, out)  # no app_js -> bundled file
+    html = out.read_text(encoding="utf-8")
+    assert "cockpit-data" in html
+    assert "addEventListener" in html  # app.js actually inlined
+
+
 def test_render_is_valid_parseable_html(dataset, tmp_path):
     out = tmp_path / "index.html"
     render_dashboard(dataset, out)
