@@ -60,3 +60,6 @@ dashboard_build/
 
 # dlt
 .dlt/
+
+# subagent-driven-development scratch (ledger)
+.superpowers/
