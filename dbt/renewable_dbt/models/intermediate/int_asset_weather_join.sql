@@ -20,12 +20,16 @@ generation_data AS (
     SELECT
         timestamp,
         asset_id,
+        asset_type,
         gross_generation_mwh,
         net_generation_mwh,
         curtailment_mwh,
         availability_pct,
         asset_capacity_mw,
         capacity_factor,
+        charge_mwh,
+        discharge_mwh,
+        heat_rate_btu_kwh,
         is_data_valid
     FROM {{ ref('stg_generation') }}
 ),
@@ -34,6 +38,7 @@ joined AS (
     SELECT
         g.timestamp,
         g.asset_id,
+        g.asset_type,
 
         -- Generation metrics
         g.gross_generation_mwh,
@@ -42,6 +47,9 @@ joined AS (
         g.availability_pct,
         g.asset_capacity_mw,
         g.capacity_factor,
+        g.charge_mwh,
+        g.discharge_mwh,
+        g.heat_rate_btu_kwh,
 
         -- Weather conditions
         w.wind_speed_mps,

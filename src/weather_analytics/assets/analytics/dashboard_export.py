@@ -32,11 +32,12 @@ _MIN_ROWS = 10
 _SOURCE_MART = "WAGA.MARTS.mart_asset_performance_daily"
 _WEATHER_MART = "WAGA.MARTS.mart_asset_weather_performance"
 _EXPORT_DIR = Path("dashboard_exports")
-_SCHEMA_VERSION = "1.0"
+_SCHEMA_VERSION = "2.0"
 
 _DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "asset_id",
     "date",
+    "asset_type",
     "total_net_generation_mwh",
     "daily_capacity_factor",
     "avg_availability_pct",
@@ -50,6 +51,13 @@ _DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "avg_ghi",
     "avg_temperature_c",
     "data_completeness_pct",
+    # Technology-specific (null where not applicable).
+    "avg_soc_pct",
+    "total_charge_mwh",
+    "total_discharge_mwh",
+    "total_fuel_mmbtu",
+    "avg_heat_rate_btu_kwh",
+    "total_co2_tonnes",
 )
 
 _WEATHER_PERFORMANCE_COLUMNS: tuple[str, ...] = (
@@ -67,14 +75,14 @@ _WEATHER_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "rolling_30d_avg_cf",
 )
 
-# Mart column names for the asset dimension.
-# ``asset_capacity_mw`` and ``asset_size_category`` come from
-# ``mart_asset_performance_daily``; ``inferred_asset_type`` comes from
-# ``mart_asset_weather_performance``.  They are joined and renamed to the
-# data-contract names (``capacity_mw``, ``size_category``, ``asset_type``)
-# during assets_df construction below.
+# Mart column names for the asset dimension. ``asset_type``,
+# ``asset_capacity_mw`` and ``asset_size_category`` all come from
+# ``mart_asset_performance_daily`` and are renamed to the data-contract names
+# (``asset_type``, ``capacity_mw``, ``size_category``) during assets_df
+# construction below.
 _DAILY_ASSET_DIM_COLUMNS: tuple[str, ...] = (
     "asset_id",
+    "asset_type",
     "asset_capacity_mw",
     "asset_size_category",
 )
@@ -199,34 +207,35 @@ def waga_dashboard_export_build(
         weather_df = raw_weather.select(list(_WEATHER_PERFORMANCE_COLUMNS))
 
         # --- Build assets dimension ---
-        # ``asset_capacity_mw`` and ``asset_size_category`` are in the daily
-        # mart; ``inferred_asset_type`` is in the weather mart (it is a model
-        # inference, not a generation concept).  Join on asset_id then rename
-        # to the data-contract column names.
-        daily_dim = raw_daily.select(list(_DAILY_ASSET_DIM_COLUMNS)).unique()
-        weather_type = raw_weather.select(["asset_id", "inferred_asset_type"]).unique(
+        # ``asset_type``, ``asset_capacity_mw`` and ``asset_size_category`` are
+        # all in the daily mart (asset_type is now explicit, carried from RAW).
+        # Project, compute a display name, and rename to the data-contract names.
+        daily_dim = raw_daily.select(list(_DAILY_ASSET_DIM_COLUMNS)).unique(
             subset=["asset_id"]
         )
         asset_id_suffix = pl.col("asset_id").str.split("_").list.last()
         display_name_expr = (
-            pl.col("inferred_asset_type").str.to_titlecase()
+            pl.col("asset_type").str.to_titlecase()
             + pl.lit(" Asset ")
             + asset_id_suffix
             + pl.lit(" (")
             + pl.col("asset_capacity_mw").cast(pl.Int64).cast(pl.Utf8)
             + pl.lit(" MW)")
         )
-        assets_df = (
-            daily_dim.join(weather_type, on="asset_id", how="left")
-            .with_columns(display_name_expr.alias("display_name"))
-            .rename(
-                {
-                    "inferred_asset_type": "asset_type",
-                    "asset_capacity_mw": "capacity_mw",
-                    "asset_size_category": "size_category",
-                }
-            )
+        assets_df = daily_dim.with_columns(
+            display_name_expr.alias("display_name")
+        ).rename(
+            {
+                "asset_capacity_mw": "capacity_mw",
+                "asset_size_category": "size_category",
+            }
         )
+        asset_type_counts = {
+            str(row["asset_type"]): int(row["count"])
+            for row in assets_df.group_by("asset_type").len(name="count").iter_rows(
+                named=True
+            )
+        }
 
         # --- Build manifest ---
         try:
@@ -243,6 +252,8 @@ def waga_dashboard_export_build(
                 "end": str(daily_df["date"].max()),
             },
             "asset_count": int(assets_df.shape[0]),
+            "asset_type_counts": asset_type_counts,
+            "weather_source": "snowflake",
             "row_counts": {
                 "daily_performance": daily_df.shape[0],
                 "weather_performance": weather_df.shape[0],

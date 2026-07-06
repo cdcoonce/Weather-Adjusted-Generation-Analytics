@@ -10,6 +10,7 @@ WITH daily_generation AS (
         date,
 
         -- Asset characteristics
+        MAX(asset_type) AS asset_type,
         MAX(asset_capacity_mw) AS asset_capacity_mw,
         MAX(asset_size_category) AS asset_size_category,
 
@@ -17,6 +18,14 @@ WITH daily_generation AS (
         ROUND(SUM(gross_generation_mwh), 4) AS total_gross_generation_mwh,
         ROUND(SUM(net_generation_mwh), 4) AS total_net_generation_mwh,
         ROUND(SUM(curtailment_mwh), 4) AS total_curtailment_mwh,
+
+        -- Technology-specific daily aggregates (null where not applicable)
+        ROUND(AVG(soc_pct), 2) AS avg_soc_pct,
+        ROUND(SUM(charge_mwh), 4) AS total_charge_mwh,
+        ROUND(SUM(discharge_mwh), 4) AS total_discharge_mwh,
+        ROUND(SUM(fuel_mmbtu), 4) AS total_fuel_mmbtu,
+        ROUND(AVG(heat_rate_btu_kwh), 2) AS avg_heat_rate_btu_kwh,
+        ROUND(SUM(co2_tonnes), 4) AS total_co2_tonnes,
 
         ROUND(AVG(gross_generation_mwh), 4) AS avg_hourly_gross_mwh,
         ROUND(AVG(net_generation_mwh), 4) AS avg_hourly_net_mwh,

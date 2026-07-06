@@ -220,8 +220,8 @@ def waga_weather_value_range_check(
             f"""
             SELECT COUNT(*) AS violations
             FROM WAGA.STAGING.stg_weather
-            WHERE wind_speed < {WIND_SPEED_MIN}
-               OR wind_speed > {WIND_SPEED_MAX}
+            WHERE wind_speed_mps < {WIND_SPEED_MIN}
+               OR wind_speed_mps > {WIND_SPEED_MAX}
                OR temperature_c < {TEMPERATURE_C_MIN}
                OR temperature_c > {TEMPERATURE_C_MAX}
                OR relative_humidity < {RELATIVE_HUMIDITY_MIN}
@@ -246,7 +246,9 @@ def waga_generation_value_range_check(
 ) -> AssetCheckResult:
     """Validate physical plausibility of generation columns.
 
-    Checks generation_mwh >= 0 and capacity_factor in [0, 1].
+    Checks net_generation_mwh >= 0 and capacity_factor in [0, 1] for the
+    generating technologies. A charging battery is a net load (negative net
+    generation and capacity factor), so storage is excluded from these bounds.
     """
     conn = snowflake.get_connection()
     try:
@@ -255,9 +257,12 @@ def waga_generation_value_range_check(
             f"""
             SELECT COUNT(*) AS violations
             FROM WAGA.STAGING.stg_generation
-            WHERE generation_mwh < {GENERATION_MWH_MIN}
-               OR capacity_factor < {CAPACITY_FACTOR_MIN}
-               OR capacity_factor > {CAPACITY_FACTOR_MAX}
+            WHERE asset_type <> 'battery'
+              AND (
+                net_generation_mwh < {GENERATION_MWH_MIN}
+                OR capacity_factor < {CAPACITY_FACTOR_MIN}
+                OR capacity_factor > {CAPACITY_FACTOR_MAX}
+              )
             """
         )
         violations: int = cursor.fetchone()[0]

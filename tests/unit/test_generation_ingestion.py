@@ -22,8 +22,8 @@ from weather_analytics.assets.ingestion.generation import (
     waga_generation_ingestion,
 )
 
-# 24 hours * 10 assets
-EXPECTED_DAILY_ROWS = 240
+# 24 hours * 12 fleet assets (4 wind, 4 solar, 2 battery, 2 gas)
+EXPECTED_DAILY_ROWS = 288
 
 
 @pytest.mark.unit

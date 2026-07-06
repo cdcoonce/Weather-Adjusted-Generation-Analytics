@@ -23,6 +23,16 @@ models:
         tests:
           - not_null
 
+      - name: asset_type
+        data_type: varchar
+        description: "Technology: wind, solar, battery, or gas"
+        constraints:
+          - type: not_null
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['wind', 'solar', 'battery', 'gas']
+
       - name: asset_capacity_mw
         data_type: float
         description: "Asset nameplate capacity in MW"
@@ -55,16 +65,44 @@ models:
         data_type: float
         description: "Peak hourly net generation"
 
+      - name: avg_soc_pct
+        data_type: float
+        description: "Battery average daily state of charge (%); null for non-storage"
+
+      - name: total_charge_mwh
+        data_type: float
+        description: "Battery total daily charge energy (MWh); null for non-storage"
+
+      - name: total_discharge_mwh
+        data_type: float
+        description: "Battery total daily discharge energy (MWh); null for non-storage"
+
+      - name: total_fuel_mmbtu
+        data_type: float
+        description: "Gas total daily fuel burn (MMBtu); null for non-thermal"
+
+      - name: avg_heat_rate_btu_kwh
+        data_type: float
+        description: "Gas average daily heat rate (Btu/kWh); null for non-thermal"
+
+      - name: total_co2_tonnes
+        data_type: float
+        description: "Gas total daily CO2 emissions (tonnes); null for non-thermal"
+
       - name: daily_capacity_factor
         data_type: float
-        description: "Daily capacity factor"
+        description: "Daily capacity factor (negative for a charging battery)"
         constraints:
           - type: not_null
         tests:
           - not_null
+          # A charging battery has a negative daily CF; the 0-1.1 band applies
+          # only to the generating technologies.
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 1.1
+              config:
+                where: "asset_type <> 'battery'"
 
       - name: avg_hourly_capacity_factor
         data_type: float
@@ -311,13 +349,13 @@ models:
 
       - name: inferred_asset_type
         data_type: varchar
-        description: "Inferred asset type based on weather correlations"
+        description: "Explicit asset technology carried from RAW (wind/solar/battery/gas)"
         constraints:
           - type: not_null
         tests:
           - not_null
           - accepted_values:
-              values: ['wind', 'solar']
+              values: ['wind', 'solar', 'battery', 'gas']
 
       - name: total_hourly_observations
         data_type: number

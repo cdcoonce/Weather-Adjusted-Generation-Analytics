@@ -47,6 +47,7 @@ def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
         {
             "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
             "DATE": [f"2026-04-{(i % 28) + 1:02d}" for i in range(rows)],
+            "ASSET_TYPE": ["wind" for _ in range(rows)],
             "TOTAL_NET_GENERATION_MWH": [100.0 + i for i in range(rows)],
             "DAILY_CAPACITY_FACTOR": [0.4 for _ in range(rows)],
             "AVG_AVAILABILITY_PCT": [98.0 for _ in range(rows)],
@@ -60,6 +61,13 @@ def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
             "AVG_GHI": [450.0 for _ in range(rows)],
             "AVG_TEMPERATURE_C": [18.5 for _ in range(rows)],
             "DATA_COMPLETENESS_PCT": [100.0 for _ in range(rows)],
+            # Technology-specific columns (null for wind in this fixture):
+            "AVG_SOC_PCT": [None for _ in range(rows)],
+            "TOTAL_CHARGE_MWH": [None for _ in range(rows)],
+            "TOTAL_DISCHARGE_MWH": [None for _ in range(rows)],
+            "TOTAL_FUEL_MMBTU": [None for _ in range(rows)],
+            "AVG_HEAT_RATE_BTU_KWH": [None for _ in range(rows)],
+            "TOTAL_CO2_TONNES": [None for _ in range(rows)],
             # Real mart column names (not the renamed data-contract names):
             "ASSET_CAPACITY_MW": [50.0 for _ in range(rows)],
             "ASSET_SIZE_CATEGORY": ["medium" for _ in range(rows)],
@@ -198,7 +206,7 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     assert result.metadata["weather_performance_bytes"] > 0
     assert result.metadata["assets_bytes"] > 0
     assert result.metadata["manifest_bytes"] > 0
-    assert result.metadata["schema_version"] == "1.0"
+    assert result.metadata["schema_version"] == "2.0"
 
     # All 4 files were written
     assert (export_dir / _DAILY_PERFORMANCE_FILE).exists()
@@ -231,7 +239,7 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     assert "date_range" in manifest
     assert "asset_count" in manifest
     assert "row_counts" in manifest
-    assert manifest["schema_version"] == "1.0"
+    assert manifest["schema_version"] == "2.0"
 
     # Connection closed
     mock_conn.close.assert_called_once()

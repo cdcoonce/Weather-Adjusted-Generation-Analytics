@@ -24,8 +24,8 @@ from weather_analytics.assets.ingestion.weather import (
 )
 from weather_analytics.mock_data.generate_generation import ASSET_CONFIGS
 
-# 24 hours * 10 assets
-EXPECTED_DAILY_ROWS = 240
+# 24 hours * 12 fleet assets (4 wind, 4 solar, 2 battery, 2 gas)
+EXPECTED_DAILY_ROWS = 288
 
 
 @pytest.mark.unit

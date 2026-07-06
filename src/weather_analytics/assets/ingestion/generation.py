@@ -1,7 +1,7 @@
 """Generation ingestion asset — generates mock data into Snowflake RAW."""
 
-import time
 from collections.abc import Iterator
+from datetime import date
 
 import dlt
 from dagster import (
@@ -19,6 +19,12 @@ from weather_analytics.mock_data.generate_generation import (
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 
 GENERATION_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
+
+
+def _partition_seed(partition_key: str) -> int:
+    """Deterministic per-day seed so re-runs merge idempotently and weather and
+    generation ingestion stay mutually consistent for the same partition."""
+    return date.fromisoformat(partition_key).toordinal()
 
 
 @dlt.resource(
@@ -84,7 +90,7 @@ def waga_generation_ingestion(
     df = generate_generation_data(
         start_date=start,
         end_date=end,
-        random_seed=int(time.time()),
+        random_seed=_partition_seed(partition_key),
     )
     row_count = len(df)
     asset_count = len(ASSET_CONFIGS)
