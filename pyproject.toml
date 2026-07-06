@@ -66,6 +66,9 @@ ignore = ["ANN101", "ANN102", "D203", "D213"]
 # CI utility scripts use print() for user-visible log output.
 "scripts/*" = ["T201", "INP001"]
 "src/weather_analytics/cockpit/*" = ["T201"]  # CLI/serve print user-facing output
+# Numerical simulation code: physics functions have legitimately wide
+# signatures (PLR0913) and inline physical constants/thresholds (PLR2004).
+"src/weather_analytics/mock_data/*" = ["PLR0913", "PLR2004"]
 
 [tool.mypy]
 python_version = "3.12"

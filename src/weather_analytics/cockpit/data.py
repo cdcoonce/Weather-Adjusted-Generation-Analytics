@@ -19,6 +19,7 @@ class Asset:
     size_category: str
     asset_type: str
     display_name: str
+    region: str = ""
 
 
 @dataclass(frozen=True)
@@ -30,6 +31,11 @@ class DailyRow:
     avg_availability_pct: float
     total_curtailment_mwh: float
     daily_performance_rating: str
+    asset_type: str = ""
+    total_discharge_mwh: float = 0.0
+    avg_soc_pct: float | None = None
+    total_co2_tonnes: float = 0.0
+    total_fuel_mmbtu: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -48,6 +54,7 @@ class Manifest:
     date_range_end: str
     asset_count: int
     schema_version: str
+    weather_source: str = ""
 
 
 @dataclass(frozen=True)
@@ -88,6 +95,7 @@ def load_dataset(export_dir: Path) -> Dataset:
         date_range_end=str(date_range.get("end", "")),
         asset_count=int(manifest_raw.get("asset_count", 0)),
         schema_version=str(manifest_raw.get("schema_version", "")),
+        weather_source=str(manifest_raw.get("weather_source", "")),
     )
 
     assets = [
@@ -97,6 +105,7 @@ def load_dataset(export_dir: Path) -> Dataset:
             size_category=str(a.get("size_category", "")),
             asset_type=str(a.get("asset_type", "")),
             display_name=str(a.get("display_name", a.get("asset_id", ""))),
+            region=str(a.get("region", "")),
         )
         for a in assets_raw
     ]
@@ -110,6 +119,13 @@ def load_dataset(export_dir: Path) -> Dataset:
             avg_availability_pct=_num(r.get("avg_availability_pct")),
             total_curtailment_mwh=_num(r.get("total_curtailment_mwh")),
             daily_performance_rating=str(r.get("daily_performance_rating", "")),
+            asset_type=str(r.get("asset_type", "")),
+            total_discharge_mwh=_num(r.get("total_discharge_mwh")),
+            avg_soc_pct=(
+                None if r.get("avg_soc_pct") is None else _num(r.get("avg_soc_pct"))
+            ),
+            total_co2_tonnes=_num(r.get("total_co2_tonnes")),
+            total_fuel_mmbtu=_num(r.get("total_fuel_mmbtu")),
         )
         for r in daily_raw
     ]

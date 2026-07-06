@@ -112,6 +112,57 @@ uv run pytest -m unit
 
 ---
 
+## Local Dashboard & Fleet Simulation
+
+The static [cockpit dashboard](https://waga-dashboard.pages.dev) can be rebuilt
+end-to-end **without Snowflake** from a local, physics-based fleet simulation.
+This drives the deployed page and matches the style of the
+[charleslikesdata.com](https://charleslikesdata.com) portfolio.
+
+### The fleet
+
+`src/weather_analytics/mock_data/fleet.py` defines a 12-asset mixed-technology
+fleet at real US sites: **onshore wind** (turbine power curve + air-density
+correction + AR(1) turbulence), **utility solar PV** (NOCT cell-temperature
+derate + inverter clipping + cloud transients), **grid battery storage**
+(SOC-bounded arbitrage dispatch, round-trip losses), and **natural gas** (CCGT +
+peaker, merit-order dispatch, part-load heat rate, forced outages, CO₂).
+
+### Real-time weather
+
+By default the simulation pulls genuine hourly ERA5 weather for each asset's
+latitude/longitude from the free [Open-Meteo archive API](https://open-meteo.com)
+(no API key). If the network is unavailable it falls back to a latitude-aware
+synthetic model, so the pipeline always runs. The dashboard header shows which
+source was used.
+
+### Rebuild the dashboard
+
+```bash
+# Full year of real weather -> exports + rendered dist/index.html
+uv run python scripts/build_local_dashboard.py \
+    --start 2025-07-01 --end 2026-06-30 --build
+
+# Deterministic offline run (synthetic weather)
+uv run python scripts/build_local_dashboard.py \
+    --start 2026-01-01 --end 2026-03-31 --synthetic --build
+
+# Then serve or deploy the static page
+uv run python -m weather_analytics.cockpit serve   # local preview
+uv run python -m weather_analytics.cockpit deploy  # Cloudflare Pages
+```
+
+The four `dashboard_exports/*.json` files (schema v2.0) carry per-technology
+metrics — battery SOC/throughput, gas fuel/heat-rate/CO₂ — alongside the shared
+generation/capacity-factor columns.
+
+> **Scope note:** the mixed fleet is the *local dashboard* dataset. The Snowflake
+> ingestion + contracted dbt marts remain wind/solar-only (they infer asset type
+> from weather correlation); extending those marts to storage/thermal is a
+> separate, warehouse-dependent change.
+
+---
+
 ## Project Structure
 
 ```
@@ -126,7 +177,16 @@ Weather_Adjusted_Generation_Analytics/
 │   ├── checks/                     # Asset checks (freshness, row count, range)
 │   ├── schedules.py                # Daily/weekly schedules
 │   ├── lib/                        # polars_utils, config, logging
-│   └── mock_data/                  # Weather + generation data generators
+│   ├── cockpit/                    # Self-contained static dashboard (build/serve/deploy)
+│   └── mock_data/                  # Fleet simulation + data generators
+│       ├── fleet.py                # 12-asset mixed fleet registry (real US sites)
+│       ├── physics.py              # Wind/solar/battery/gas physics models
+│       ├── weather_sources.py      # Open-Meteo real weather + synthetic fallback
+│       ├── simulate.py             # Weather + physics -> hourly generation
+│       ├── local_export.py         # Build dashboard JSON without Snowflake
+│       └── generate_*.py           # Legacy wind/solar generators (Snowflake path)
+│
+├── scripts/build_local_dashboard.py # Simulate -> export -> render the dashboard
 │
 ├── dbt/renewable_dbt/              # dbt project (dbt-snowflake)
 │   ├── models/
