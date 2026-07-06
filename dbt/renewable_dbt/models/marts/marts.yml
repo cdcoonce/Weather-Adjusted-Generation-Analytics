@@ -230,6 +230,49 @@ models:
             - asset_id
             - date
 
+  - name: dim_asset
+    description: "Asset dimension: site name, technology, capacity, coordinates, region"
+    config:
+      contract:
+        enforced: true
+    columns:
+      - name: asset_id
+        data_type: varchar
+        description: "Unique asset identifier"
+        constraints:
+          - type: not_null
+        tests:
+          - not_null
+          - unique
+      - name: asset_name
+        data_type: varchar
+        description: "Human-readable site name"
+        constraints:
+          - type: not_null
+      - name: asset_type
+        data_type: varchar
+        description: "Technology: wind, solar, battery, or gas"
+        constraints:
+          - type: not_null
+        tests:
+          - accepted_values:
+              values: ['wind', 'solar', 'battery', 'gas']
+      - name: asset_capacity_mw
+        data_type: float
+        description: "Nameplate capacity in MW"
+      - name: asset_size_category
+        data_type: varchar
+        description: "Size classification (Small/Medium/Large)"
+      - name: latitude
+        data_type: float
+        description: "Site latitude (WGS84)"
+      - name: longitude
+        data_type: float
+        description: "Site longitude (WGS84)"
+      - name: region
+        data_type: varchar
+        description: "Grid/ISO region label"
+
   - name: mart_asset_weather_performance
     description: "Weather-adjusted performance mart with correlations and performance scores"
     config:

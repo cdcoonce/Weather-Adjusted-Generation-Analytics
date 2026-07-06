@@ -1,0 +1,47 @@
+version: 2
+
+seeds:
+  - name: asset_dimension
+    description: >
+      Static asset dimension generated from the fleet registry
+      (weather_analytics.mock_data.fleet.FLEET) via
+      scripts/generate_asset_seed.py. Provides site name, technology,
+      capacity, coordinates, and grid region for each asset.
+    config:
+      column_types:
+        asset_id: varchar
+        asset_name: varchar
+        asset_type: varchar
+        capacity_mw: float
+        latitude: float
+        longitude: float
+        region: varchar
+    columns:
+      - name: asset_id
+        description: "Unique asset identifier"
+        tests:
+          - not_null
+          - unique
+      - name: asset_name
+        description: "Human-readable site name"
+        tests:
+          - not_null
+      - name: asset_type
+        description: "Technology: wind, solar, battery, or gas"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['wind', 'solar', 'battery', 'gas']
+      - name: capacity_mw
+        description: "Nameplate capacity in MW"
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1000
+      - name: latitude
+        description: "Site latitude (WGS84)"
+      - name: longitude
+        description: "Site longitude (WGS84)"
+      - name: region
+        description: "Grid/ISO region label"

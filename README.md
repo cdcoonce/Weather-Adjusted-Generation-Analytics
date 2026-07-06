@@ -194,8 +194,9 @@ Weather_Adjusted_Generation_Analytics/
 │   ├── models/
 │   │   ├── staging/{weather,generation}/
 │   │   ├── intermediate/
-│   │   ├── marts/
+│   │   ├── marts/                  # incl. dim_asset (asset dimension)
 │   │   └── semantic_models/
+│   ├── seeds/                      # asset_dimension.csv (generated from fleet.FLEET)
 │   └── profiles/                   # Snowflake key-pair auth
 │
 ├── tests/                          # pytest unit tests

@@ -63,6 +63,7 @@ Parquet/API sources
 - Type check: `uv run mypy src/weather_analytics/`
 - Rebuild dashboard (no Snowflake): `uv run python scripts/build_local_dashboard.py --start 2025-07-01 --end 2026-06-30 --build` (add `--synthetic` for a deterministic offline run)
 - Preview / deploy dashboard: `uv run python -m weather_analytics.cockpit serve` / `... deploy`
+- Regenerate the asset-dimension seed after editing `fleet.FLEET`: `uv run python scripts/generate_asset_seed.py` (writes `dbt/renewable_dbt/seeds/asset_dimension.csv`), then `dbt seed` to load it
 
 ## Code Style
 
@@ -88,6 +89,7 @@ Parquet/API sources
 - dbt manifest generated at build time (`dbt parse`); code handles missing manifest gracefully
 - **One fleet, two build paths.** The 12-asset `mock_data/fleet.FLEET` (4 wind, 4 solar, 2 battery, 2 gas) is the single source of truth. It feeds **both** the Snowflake pipeline (ingestion → RAW → dbt marts → `dashboard_export.py`) and the no-warehouse local path (`simulate.py` → `local_export.py`). Both emit the identical **v2.0** export schema.
 - **Explicit `asset_type`, not inferred.** RAW/staging/marts carry an explicit `asset_type` column (`accepted_values: ['wind','solar','battery','gas']`); the weather mart's `inferred_asset_type` is now that explicit value, not a wind-vs-solar correlation guess.
+- **Asset dimension.** Site name / coordinates / region live in the `asset_dimension` dbt seed (generated from `fleet.FLEET` by `scripts/generate_asset_seed.py`) → `dim_asset` mart (`WAGA.MARTS.dim_asset`, contracted). `dashboard_export` joins it so assets.json carries real names + lat/lon like the local path. **Don't hand-edit the seed CSV** — regenerate it from `fleet.FLEET`.
 - **Type-branched scoring** (`mart_asset_weather_performance`): weather-adjusted ratio for wind/solar, realized round-trip efficiency (discharge/charge) for battery, heat-rate efficiency (best/realized) for gas.
 - **Battery is a net load.** A charging battery has negative `net_generation_mwh` and capacity factor. Non-negativity range tests (RAW source, staging, daily mart) and the `waga_generation_value_range_check` are all scoped `where asset_type <> 'battery'`.
 - **Ingestion is deterministic per partition** (`_partition_seed(partition_key)`), so re-runs merge idempotently and the weather/generation assets stay mutually consistent. Ingestion weather is synthetic; the live Open-Meteo pull is a local-dashboard feature.

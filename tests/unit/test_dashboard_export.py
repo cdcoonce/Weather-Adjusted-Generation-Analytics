@@ -76,6 +76,22 @@ def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
     )
 
 
+def _make_valid_dim_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
+    """Return a dim_asset-shaped DataFrame with uppercase columns like Snowflake."""
+    return pl.DataFrame(
+        {
+            "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
+            "ASSET_NAME": [f"Site {i:03d}" for i in range(rows)],
+            "ASSET_TYPE": ["wind" for _ in range(rows)],
+            "ASSET_CAPACITY_MW": [50.0 for _ in range(rows)],
+            "ASSET_SIZE_CATEGORY": ["Medium" for _ in range(rows)],
+            "LATITUDE": [35.0 for _ in range(rows)],
+            "LONGITUDE": [-100.0 for _ in range(rows)],
+            "REGION": ["ERCOT" for _ in range(rows)],
+        }
+    )
+
+
 def _make_valid_weather_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
     """Return a weather-mart-shaped DataFrame with uppercase columns like Snowflake."""
     return pl.DataFrame(
@@ -185,12 +201,13 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     export_dir = tmp_path / "exports"
     daily_df = _make_valid_mart_df()
     weather_df = _make_valid_weather_mart_df()
+    dim_df = _make_valid_dim_df()
     mock_resource, mock_conn = _make_mock_snowflake()
 
     with (
         patch(
             "weather_analytics.assets.analytics.dashboard_export.pl.read_database",
-            side_effect=[daily_df, weather_df],
+            side_effect=[daily_df, weather_df, dim_df],
         ),
         patch(
             "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
@@ -228,10 +245,14 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     first_weather = weather_records[0]
     assert set(first_weather.keys()) == set(_WEATHER_PERFORMANCE_COLUMNS)
 
-    # assets.json has display_name computed
+    # assets.json has display_name + real dimension fields from dim_asset
     assets_records = json.loads((export_dir / _ASSETS_FILE).read_text())
     assert isinstance(assets_records, list)
     assert all("display_name" in r for r in assets_records)
+    first_asset = assets_records[0]
+    for field in ("name", "region", "latitude", "longitude", "capacity_mw"):
+        assert field in first_asset
+    assert first_asset["name"] in first_asset["display_name"]
 
     # manifest.json is valid JSON with expected keys
     manifest = json.loads((export_dir / _MANIFEST_FILE).read_text())
