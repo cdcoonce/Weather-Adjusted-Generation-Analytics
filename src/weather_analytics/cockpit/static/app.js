@@ -13,10 +13,10 @@
   var weather = D.weather || [];
 
   var TYPE_COLORS = {
-    wind: "#2f6f5f", solar: "#d4a12e", battery: "#3f7cac",
-    gas: "#9c5b3b", unknown: "#8a8f98",
+    wind: "#4f7d63", solar: "#b3873f", battery: "#8fa8c4",
+    gas: "#9e6c52", unknown: "#a0a0a0",
   };
-  var PRIMARY = "#2f6f5f", GOLD = "#b0872f";
+  var PRIMARY = "#4f7d63", GOLD = "#b3873f";
   var RENEWABLE = { wind: 1, solar: 1 };
   var CF_TYPES = { wind: 1, solar: 1, gas: 1 };
 
