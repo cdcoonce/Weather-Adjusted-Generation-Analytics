@@ -18,17 +18,17 @@ from weather_analytics.cockpit.data import DailyRow, Dataset, WeatherRow
 # Technology series colors — echo the portfolio's data-viz palette (green/gold)
 # and extend it with distinct, light-theme-friendly hues for storage and gas.
 TYPE_COLORS: dict[str, str] = {
-    "wind": "#2f6f5f",
-    "solar": "#d4a12e",
-    "battery": "#3f7cac",
-    "gas": "#9c5b3b",
-    "unknown": "#8a8f98",
+    "wind": "#4f7d63",
+    "solar": "#b3873f",
+    "battery": "#8fa8c4",
+    "gas": "#9e6c52",
+    "unknown": "#a0a0a0",
 }
 
 _RENEWABLE = ("wind", "solar")
 _CF_TYPES = ("wind", "solar", "gas")  # battery CF is not meaningful
-_PRIMARY = "#2f6f5f"  # portfolio data-viz green
-_SECONDARY = "#b0872f"  # portfolio data-viz gold
+_PRIMARY = "#4f7d63"  # afk-cockpit sage green
+_SECONDARY = "#b3873f"  # afk-cockpit amber
 
 
 def type_color(asset_type: str) -> str:
