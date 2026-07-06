@@ -50,6 +50,8 @@ def render_dashboard(
         "generation": _safe(lambda: charts.generation_series(dataset), None),
         "capacity_factor": _safe(lambda: charts.capacity_factor_series(dataset), None),
         "performance": _safe(lambda: charts.performance_series(dataset), None),
+        "battery_soc": _safe(lambda: charts.battery_soc_series(dataset), None),
+        "emissions": _safe(lambda: charts.emissions_series(dataset), None),
         "asset_bars": _safe(lambda: charts.asset_bars(dataset), []),
         "type_split": _safe(lambda: charts.type_split(dataset), []),
         "assets": dataset.assets,

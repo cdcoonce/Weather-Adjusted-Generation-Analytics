@@ -2,17 +2,17 @@
 {%- macro _line_svg(s) -%}
 {%- if s -%}
 <svg viewBox="0 0 {{ s.width }} {{ s.height }}" preserveAspectRatio="none" role="img">
-  <path d="{{ s.area_path }}" fill="rgba(90,169,230,0.20)" />
-  <polyline points="{{ s.polyline }}" fill="none" stroke="var(--accent)" stroke-width="2" />
+  <path d="{{ s.area_path }}" fill="{{ s.color }}" fill-opacity="0.12" />
+  <polyline points="{{ s.polyline }}" fill="none" stroke="{{ s.color }}" stroke-width="2" />
 </svg>
-<div class="axis"><span>{{ s.x0_label }}</span><span>max {{ '%.2f'|format(s.y_max) }}</span><span>{{ s.x1_label }}</span></div>
+<div class="axis"><span>{{ s.x0_label }}</span><span>peak {{ '%.2f'|format(s.y_max) }}</span><span>{{ s.x1_label }}</span></div>
 {%- else -%}<div class="nodata">no data in range</div>{%- endif -%}
 {%- endmacro -%}
-{%- macro _hbars_html(rows, show_type) -%}
+{%- macro _hbars_html(rows) -%}
 {%- if rows -%}
 {%- for r in rows -%}
-<div class="hbar-row"><div class="hbar-label">{{ r.label }}</div>
-<div class="hbar-track"><div class="hbar-fill{% if show_type and r.asset_type == 'solar' %} solar{% endif %}" style="width: {{ r.pct }}%"></div></div>
+<div class="hbar-row"><div class="hbar-label" title="{{ r.name or r.label }}">{{ r.name or r.label }}</div>
+<div class="hbar-track"><div class="hbar-fill" style="width: {{ r.pct }}%; background: {{ r.color or 'var(--data-green)' }}"></div></div>
 <div class="hbar-value">{{ r.disp }}</div></div>
 {%- endfor -%}
 {%- else -%}<div class="nodata">no data in range</div>{%- endif -%}
@@ -23,62 +23,124 @@
 <meta charset="utf-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1" />
 <title>Weather-Adjusted Generation Analytics</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600&display=swap" rel="stylesheet" />
 <style>
   :root {
-    --bg: #0f1115; --card: #171a21; --ink: #e6e9ef; --muted: #9aa4b2;
-    --accent: #5aa9e6; --accent2: #7ee0c0; --line: #262b34;
+    --white: #fff; --gray-50: #f9f9f9; --gray-100: #f0f0f0; --gray-200: #e0e0e0;
+    --gray-500: #666; --gray-600: #555; --gray-800: #353535;
+    --accent-blue: rgb(235, 241, 248); --accent-soft: rgba(235, 241, 248, 0.5);
+    --data-green: #2f6f5f; --data-gold: #b0872f;
+    --wind: #2f6f5f; --solar: #d4a12e; --battery: #3f7cac; --gas: #9c5b3b;
+    --bg: var(--gray-50); --card: var(--white);
+    --ink: var(--gray-800); --muted: var(--gray-500); --line: var(--gray-200);
+    --radius-card: 10px; --radius-sm: 8px; --radius-pill: 2rem;
+    --shadow-card: 0 4px 6px rgba(0, 0, 0, 0.08);
+    --shadow-hover: 0 8px 12px rgba(0, 0, 0, 0.14);
+    --transition: 300ms ease;
+    --font: 'Poppins', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
   }
   * { box-sizing: border-box; }
   body { margin: 0; background: var(--bg); color: var(--ink);
-    font: 14px/1.5 -apple-system, Segoe UI, Roboto, sans-serif; }
-  header { padding: 24px 20px 8px; }
-  h1 { margin: 0; font-size: 20px; }
-  .sub { color: var(--muted); font-size: 12px; margin-top: 4px; }
-  .wrap { padding: 12px 20px 48px; max-width: 1000px; margin: 0 auto; }
-  .controls { display: flex; flex-wrap: wrap; gap: 10px; margin: 12px 0; }
-  .controls label { color: var(--muted); font-size: 12px; display: flex;
-    flex-direction: column; gap: 4px; }
+    font-family: var(--font); font-size: 14px; line-height: 1.5;
+    -webkit-font-smoothing: antialiased; }
+  a { color: var(--data-green); }
+  header { max-width: 1160px; margin: 0 auto; padding: 40px 24px 8px; }
+  h1 { margin: 0; font-size: 1.75rem; font-weight: 600; letter-spacing: -0.01em; }
+  .sub { color: var(--muted); font-size: 0.9rem; margin-top: 8px;
+    display: flex; flex-wrap: wrap; gap: 6px 14px; align-items: center; }
+  .badge { display: inline-flex; align-items: center; gap: 6px;
+    background: var(--accent-soft); color: var(--gray-800); font-size: 0.78rem;
+    font-weight: 500; padding: 3px 12px; border-radius: var(--radius-pill); }
+  .badge.live::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--data-green); }
+  .badge.sim::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--data-gold); }
+  .wrap { max-width: 1160px; margin: 0 auto; padding: 12px 24px 64px; }
+  .controls { display: flex; flex-wrap: wrap; gap: 14px; margin: 20px 0 8px; }
+  .controls label { color: var(--muted); font-size: 0.78rem; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.04em;
+    display: flex; flex-direction: column; gap: 5px; }
   .controls select, .controls input {
-    background: var(--card); color: var(--ink); border: 1px solid var(--line);
-    border-radius: 6px; padding: 6px 8px; }
-  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px; margin: 12px 0; }
-  .kpi { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    padding: 14px 16px; }
-  .kpi .label { color: var(--muted); font-size: 11px; text-transform: uppercase;
-    letter-spacing: .04em; }
-  .kpi .value { font-size: 26px; font-weight: 600; margin-top: 6px; }
-  .card { background: var(--card); border: 1px solid var(--line); border-radius: 10px;
-    padding: 16px; margin: 12px 0; }
-  .card h2 { margin: 0 0 10px; font-size: 13px; color: var(--muted);
-    text-transform: uppercase; letter-spacing: .04em; }
+    background: var(--white); color: var(--ink); border: 1px solid var(--line);
+    border-radius: var(--radius-sm); padding: 8px 10px; font-family: var(--font);
+    font-size: 0.9rem; font-weight: 400; text-transform: none; letter-spacing: 0; }
+  .controls select:focus, .controls input:focus {
+    outline: none; border-color: var(--data-green); }
+  .legend { display: flex; flex-wrap: wrap; gap: 8px 16px; margin: 8px 0 4px; }
+  .legend-item { display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.82rem; color: var(--gray-600); }
+  .legend-dot { width: 11px; height: 11px; border-radius: 3px; }
+  .kpis { display: grid; gap: 14px; margin: 16px 0;
+    grid-template-columns: repeat(auto-fit, minmax(165px, 1fr)); }
+  .kpi { background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius-card); padding: 16px 18px;
+    box-shadow: var(--shadow-card); transition: transform var(--transition),
+      box-shadow var(--transition); }
+  .kpi:hover { transform: translateY(-3px); box-shadow: var(--shadow-hover); }
+  .kpi .label { color: var(--muted); font-size: 0.72rem; font-weight: 500;
+    text-transform: uppercase; letter-spacing: 0.05em; }
+  .kpi .value { font-size: 1.9rem; font-weight: 600; margin-top: 8px;
+    font-variant-numeric: tabular-nums; letter-spacing: -0.02em; }
+  .kpi .unit { color: var(--muted); font-size: 0.72rem; margin-top: 2px; }
+  .grid2 { display: grid; gap: 16px; grid-template-columns: 1fr 1fr; }
+  @media (max-width: 720px) { .grid2 { grid-template-columns: 1fr; } }
+  .card { background: var(--card); border: 1px solid var(--line);
+    border-radius: var(--radius-card); padding: 20px; margin: 16px 0;
+    box-shadow: var(--shadow-card); }
+  .card h2 { margin: 0 0 14px; font-size: 0.78rem; color: var(--muted);
+    font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em; }
   svg { width: 100%; height: auto; display: block; }
-  .hbar-row { display: grid; grid-template-columns: 80px 1fr 90px; align-items: center;
-    gap: 8px; margin: 6px 0; }
-  .hbar-track { background: var(--line); border-radius: 5px; height: 12px; overflow: hidden; }
-  .hbar-fill { background: var(--accent); height: 100%; }
-  .hbar-fill.solar { background: var(--accent2); }
-  .hbar-value { text-align: right; color: var(--muted); font-variant-numeric: tabular-nums; }
-  .nodata { color: var(--muted); font-style: italic; }
+  .hbar-row { display: grid; grid-template-columns: 130px 1fr 92px;
+    align-items: center; gap: 10px; margin: 8px 0; }
+  .hbar-label { font-size: 0.85rem; overflow: hidden; text-overflow: ellipsis;
+    white-space: nowrap; }
+  .hbar-track { background: var(--gray-100); border-radius: 5px; height: 12px;
+    overflow: hidden; }
+  .hbar-fill { height: 100%; border-radius: 5px; transition: width var(--transition); }
+  .hbar-value { text-align: right; color: var(--gray-600);
+    font-variant-numeric: tabular-nums; font-size: 0.85rem; }
+  .nodata { color: var(--muted); font-style: italic; padding: 8px 0; }
   .axis { display: flex; justify-content: space-between; color: var(--muted);
-    font-size: 11px; margin-top: 4px; }
+    font-size: 0.72rem; margin-top: 6px; }
+  table.roster { width: 100%; border-collapse: collapse; font-size: 0.85rem; }
+  table.roster th { text-align: left; color: var(--muted); font-weight: 500;
+    font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+    padding: 6px 10px; border-bottom: 1px solid var(--line); }
+  table.roster td { padding: 8px 10px; border-bottom: 1px solid var(--gray-100);
+    font-variant-numeric: tabular-nums; }
+  .type-chip { display: inline-flex; align-items: center; gap: 6px;
+    font-size: 0.78rem; text-transform: capitalize; }
+  .type-chip::before { content: ""; width: 9px; height: 9px; border-radius: 3px;
+    background: var(--dot, var(--muted)); }
+  footer { max-width: 1160px; margin: 0 auto; padding: 8px 24px 48px;
+    color: var(--muted); font-size: 0.78rem; }
 </style>
 </head>
 <body>
 <header>
   <h1>Weather-Adjusted Generation Analytics</h1>
   <div class="sub">
-    {{ manifest.date_range_start }} → {{ manifest.date_range_end }} ·
-    {{ manifest.asset_count }} assets · generated {{ manifest.generated_at }}
+    <span>{{ manifest.date_range_start }} &rarr; {{ manifest.date_range_end }}</span>
+    <span>&middot; {{ manifest.asset_count }} assets</span>
+    {% if manifest.weather_source == 'open-meteo' -%}
+    <span class="badge live">live Open-Meteo weather</span>
+    {%- elif manifest.weather_source == 'synthetic' -%}
+    <span class="badge sim">simulated weather</span>
+    {%- endif %}
+    <span>&middot; generated {{ manifest.generated_at }}</span>
   </div>
 </header>
 <div class="wrap">
   <div class="controls">
-    <label>asset type
+    <label>technology
       <select id="f-type">
         <option value="">all</option>
         <option value="wind">wind</option>
         <option value="solar">solar</option>
+        <option value="battery">battery</option>
+        <option value="gas">gas</option>
       </select>
     </label>
     <label>asset
@@ -91,28 +153,57 @@
     <label>to<input type="date" id="f-end" value="{{ manifest.date_range_end }}" /></label>
   </div>
 
+  <div class="legend">
+    <span class="legend-item"><span class="legend-dot" style="background: var(--wind)"></span>wind</span>
+    <span class="legend-item"><span class="legend-dot" style="background: var(--solar)"></span>solar</span>
+    <span class="legend-item"><span class="legend-dot" style="background: var(--battery)"></span>battery</span>
+    <span class="legend-item"><span class="legend-dot" style="background: var(--gas)"></span>gas</span>
+  </div>
+
   <div class="kpis" id="kpis">
     {% for k in kpis %}
     <div class="kpi"><div class="label">{{ k.label }}</div>
-      <div class="value" data-kpi="{{ k.key }}">{{ k.value }}</div></div>
+      <div class="value" data-kpi="{{ k.key }}">{{ k.value }}</div>
+      {% if k.unit %}<div class="unit">{{ k.unit }}</div>{% endif %}</div>
     {% endfor %}
   </div>
 
-  <div class="card"><h2>net generation (MWh)</h2>
+  <div class="card"><h2>fleet net generation (MWh / day)</h2>
     <div id="chart-generation">{{ _line_svg(generation) }}</div></div>
 
-  <div class="card"><h2>capacity factor</h2>
-    <div id="chart-capacity_factor">{{ _line_svg(capacity_factor) }}</div></div>
+  <div class="card"><h2>generation mix by technology</h2>
+    <div id="chart-mix"><div class="nodata">loading&hellip;</div></div></div>
 
-  <div class="card"><h2>weather-adjusted performance score</h2>
-    <div id="chart-performance">{{ _line_svg(performance) }}</div></div>
+  <div class="grid2">
+    <div class="card"><h2>capacity factor by asset</h2>
+      <div id="chart-asset_bars">{{ _hbars_html(asset_bars) }}</div></div>
+    <div class="card"><h2>net generation by technology (MWh)</h2>
+      <div id="chart-type_split">{{ _hbars_html(type_split) }}</div></div>
+  </div>
 
-  <div class="card"><h2>capacity factor by asset</h2>
-    <div id="chart-asset_bars">{{ _hbars_html(asset_bars, true) }}</div></div>
+  <div class="grid2">
+    <div class="card"><h2>battery state of charge (%)</h2>
+      <div id="chart-battery_soc">{{ _line_svg(battery_soc) }}</div></div>
+    <div class="card"><h2>gas CO&#8322; emissions (tonnes / day)</h2>
+      <div id="chart-emissions">{{ _line_svg(emissions) }}</div></div>
+  </div>
 
-  <div class="card"><h2>generation by type</h2>
-    <div id="chart-type_split">{{ _hbars_html(type_split, false) }}</div></div>
+  <div class="card"><h2>fleet capacity factor &amp; weather-adjusted score</h2>
+    <div class="grid2">
+      <div><div class="axis" style="margin:0 0 6px"><span>capacity factor</span></div>
+        <div id="chart-capacity_factor">{{ _line_svg(capacity_factor) }}</div></div>
+      <div><div class="axis" style="margin:0 0 6px"><span>weather-adjusted performance score</span></div>
+        <div id="chart-performance">{{ _line_svg(performance) }}</div></div>
+    </div></div>
+
+  <div class="card"><h2>fleet roster</h2>
+    <div id="fleet-roster"><div class="nodata">loading&hellip;</div></div></div>
 </div>
+
+<footer>
+  Built from a local WAGA fleet simulation &middot; wind / solar / battery / gas
+  &middot; data schema v{{ manifest.schema_version }}
+</footer>
 
 <script type="application/json" id="cockpit-data">{{ data_island | safe }}</script>
 <script>{{ app_js | safe }}</script>

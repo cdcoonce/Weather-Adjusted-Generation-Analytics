@@ -29,7 +29,14 @@ Parquet/API sources
   - `checks/` — freshness, row count, value range asset checks
   - `schedules.py` — daily ingestion, daily dbt, weekly analytics
   - `lib/` — `polars_utils.py` (LazyFrame), `config.py` (Pydantic Settings), `logging.py`
-  - `mock_data/` — weather + generation generators for local dev
+  - `cockpit/` — self-contained static dashboard (Jinja + inline SVG, no chart lib); `build`/`serve`/`deploy` CLI
+  - `mock_data/` — data generators **and** the local fleet simulation:
+    - `fleet.py` — 12-asset mixed fleet (wind/solar/battery/gas) at real US lat/lon
+    - `physics.py` — vectorized plant physics (power curves, SOC dispatch, heat rate)
+    - `weather_sources.py` — Open-Meteo real weather + synthetic fallback
+    - `simulate.py` — weather + physics → hourly generation (merit-order dispatch)
+    - `local_export.py` — build the 4 dashboard JSON files with **no Snowflake**
+    - `generate_generation.py` / `generate_weather.py` — legacy wind/solar generators feeding the Snowflake ingestion path
 - `dbt/renewable_dbt/` — dbt project (dbt-snowflake)
   - `models/staging/{weather,generation}/` — per-source subfolders
   - `models/intermediate/` — ephemeral models
@@ -54,6 +61,8 @@ Parquet/API sources
 - Lint: `uv run ruff check src/weather_analytics/`
 - Format: `uv run ruff format src/weather_analytics/`
 - Type check: `uv run mypy src/weather_analytics/`
+- Rebuild dashboard (no Snowflake): `uv run python scripts/build_local_dashboard.py --start 2025-07-01 --end 2026-06-30 --build` (add `--synthetic` for a deterministic offline run)
+- Preview / deploy dashboard: `uv run python -m weather_analytics.cockpit serve` / `... deploy`
 
 ## Code Style
 
@@ -77,6 +86,8 @@ Parquet/API sources
 - dbt staging organized into per-source subfolders (`weather/`, `generation/`)
 - New data source = new ingestion asset + staging subfolder. Pure additive.
 - dbt manifest generated at build time (`dbt parse`); code handles missing manifest gracefully
+- **Two fleets, on purpose.** The Snowflake ingestion + contracted dbt marts are **wind/solar only** (`ASSET_CONFIGS`; marts infer type from weather correlation, `accepted_values: ['wind','solar']`). The **local simulation** (`mock_data/fleet.py`) is the full **wind/solar/battery/gas** fleet and feeds the dashboard via `local_export.py` — no warehouse. Keep them independent: adding storage/thermal to the local fleet must never touch the contracted marts. Extending the Snowflake path to 4 types is a separate, warehouse-dependent change (branch marts by `asset_type`, widen `accepted_values`, add nullable type-specific columns).
+- Dashboard exports are schema-versioned (`manifest.schema_version`); the local fleet writes **v2.0** (adds battery SOC/throughput + gas fuel/heat-rate/CO₂ columns). `cockpit/data.py` tolerates missing/extra fields so both the Snowflake (v1.0) and local (v2.0) exports render.
 - Ingestion assets use `op_tags={"dagster/concurrency_key": "waga_ingestion"}` to prevent concurrent merges
 
 ## Key Design Decisions
