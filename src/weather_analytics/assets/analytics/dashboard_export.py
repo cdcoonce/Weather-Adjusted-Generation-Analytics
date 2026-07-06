@@ -7,7 +7,6 @@ render.
 """
 
 import json
-import time
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -21,6 +20,7 @@ from dagster import (
     MetadataValue,
     asset,
 )
+from snowflake.connector import SnowflakeConnection
 
 from weather_analytics.resources.snowflake import WAGASnowflakeResource
 
@@ -31,12 +31,14 @@ from weather_analytics.resources.snowflake import WAGASnowflakeResource
 _MIN_ROWS = 10
 _SOURCE_MART = "WAGA.MARTS.mart_asset_performance_daily"
 _WEATHER_MART = "WAGA.MARTS.mart_asset_weather_performance"
+_DIM_MART = "WAGA.MARTS.dim_asset"
 _EXPORT_DIR = Path("dashboard_exports")
-_SCHEMA_VERSION = "1.0"
+_SCHEMA_VERSION = "2.0"
 
 _DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "asset_id",
     "date",
+    "asset_type",
     "total_net_generation_mwh",
     "daily_capacity_factor",
     "avg_availability_pct",
@@ -50,6 +52,13 @@ _DAILY_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "avg_ghi",
     "avg_temperature_c",
     "data_completeness_pct",
+    # Technology-specific (null where not applicable).
+    "avg_soc_pct",
+    "total_charge_mwh",
+    "total_discharge_mwh",
+    "total_fuel_mmbtu",
+    "avg_heat_rate_btu_kwh",
+    "total_co2_tonnes",
 )
 
 _WEATHER_PERFORMANCE_COLUMNS: tuple[str, ...] = (
@@ -67,22 +76,79 @@ _WEATHER_PERFORMANCE_COLUMNS: tuple[str, ...] = (
     "rolling_30d_avg_cf",
 )
 
-# Mart column names for the asset dimension.
-# ``asset_capacity_mw`` and ``asset_size_category`` come from
-# ``mart_asset_performance_daily``; ``inferred_asset_type`` comes from
-# ``mart_asset_weather_performance``.  They are joined and renamed to the
-# data-contract names (``capacity_mw``, ``size_category``, ``asset_type``)
-# during assets_df construction below.
-_DAILY_ASSET_DIM_COLUMNS: tuple[str, ...] = (
+# Columns projected from the ``dim_asset`` mart to build assets.json. Provides
+# real site names, coordinates, and region; renamed to the data-contract names
+# (``name``, ``capacity_mw``, ``size_category``) during assets_df construction.
+_DIM_COLUMNS: tuple[str, ...] = (
     "asset_id",
+    "asset_name",
+    "asset_type",
     "asset_capacity_mw",
     "asset_size_category",
+    "latitude",
+    "longitude",
+    "region",
 )
 
 _DAILY_PERFORMANCE_FILE = "daily_performance.json"
 _WEATHER_PERFORMANCE_FILE = "weather_performance.json"
 _ASSETS_FILE = "assets.json"
 _MANIFEST_FILE = "manifest.json"
+
+
+def _query_and_validate(
+    conn: SnowflakeConnection,
+    mart: str,
+    required_columns: tuple[str, ...],
+    *,
+    min_rows: int | None,
+    context: AssetExecutionContext,
+) -> pl.DataFrame:
+    """Query a mart, lowercase columns, and validate row count + schema.
+
+    Parameters
+    ----------
+    conn : SnowflakeConnection
+        Open Snowflake connection.
+    mart : str
+        Fully-qualified mart/table name.
+    required_columns : tuple[str, ...]
+        Columns that must be present (post-lowercasing).
+    min_rows : int | None
+        Minimum acceptable row count, or ``None`` to skip the check.
+    context : AssetExecutionContext
+        For logging.
+
+    Returns
+    -------
+    pl.DataFrame
+        The queried frame with lowercased column names.
+
+    Raises
+    ------
+    dagster.Failure
+        If the row count is below ``min_rows`` or required columns are missing.
+    """
+    df = pl.read_database(query=f"SELECT * FROM {mart}", connection=conn)
+    df = df.rename({col: col.lower() for col in df.columns})
+    context.log.info("%s query completed (%d rows)", mart, df.shape[0])
+
+    if min_rows is not None and df.shape[0] < min_rows:
+        raise Failure(
+            description=(
+                f"Source mart {mart} has {df.shape[0]} rows, need at least "
+                f"{min_rows}. Refusing to publish a broken-looking dashboard."
+            ),
+        )
+    missing = [c for c in required_columns if c not in df.columns]
+    if missing:
+        raise Failure(
+            description=(
+                f"Mart {mart} is missing expected columns: {missing}. "
+                f"Check dbt model schema."
+            ),
+        )
+    return df
 
 
 # ===========================================================================
@@ -93,7 +159,11 @@ _MANIFEST_FILE = "manifest.json"
 @asset(
     name="waga_dashboard_export_build",
     group_name="dashboard",
-    deps=["mart_asset_performance_daily", "mart_asset_weather_performance"],
+    deps=[
+        "mart_asset_performance_daily",
+        "mart_asset_weather_performance",
+        "dim_asset",
+    ],
 )
 def waga_dashboard_export_build(
     context: AssetExecutionContext,
@@ -124,109 +194,51 @@ def waga_dashboard_export_build(
     """
     conn = snowflake.get_connection()
     try:
-        # --- Query daily performance mart ---
-        query_start = time.monotonic()
-        raw_daily = pl.read_database(
-            query=f"SELECT * FROM {_SOURCE_MART}",
-            connection=conn,
+        # --- Query + validate the marts ---
+        raw_daily = _query_and_validate(
+            conn, _SOURCE_MART, _DAILY_PERFORMANCE_COLUMNS,
+            min_rows=_MIN_ROWS, context=context,
         )
-        raw_daily = raw_daily.rename({col: col.lower() for col in raw_daily.columns})
-        query_ms = (time.monotonic() - query_start) * 1000
-        context.log.info(
-            "Daily mart query completed in %.0fms (%d rows)",
-            query_ms,
-            raw_daily.shape[0],
+        raw_weather = _query_and_validate(
+            conn, _WEATHER_MART, _WEATHER_PERFORMANCE_COLUMNS,
+            min_rows=_MIN_ROWS, context=context,
         )
-
-        if raw_daily.shape[0] < _MIN_ROWS:
-            raise Failure(
-                description=(
-                    f"Source mart {_SOURCE_MART} has {raw_daily.shape[0]} rows, "
-                    f"need at least {_MIN_ROWS}. Refusing to publish a "
-                    f"broken-looking dashboard."
-                ),
-            )
-
-        missing_daily = [
-            c for c in _DAILY_PERFORMANCE_COLUMNS if c not in raw_daily.columns
-        ]
-        if missing_daily:
-            raise Failure(
-                description=(
-                    f"Mart {_SOURCE_MART} is missing expected columns: "
-                    f"{missing_daily}. Check dbt model schema."
-                ),
-            )
-
-        # --- Query weather performance mart ---
-        weather_start = time.monotonic()
-        raw_weather = pl.read_database(
-            query=f"SELECT * FROM {_WEATHER_MART}",
-            connection=conn,
+        raw_dim = _query_and_validate(
+            conn, _DIM_MART, _DIM_COLUMNS, min_rows=None, context=context,
         )
-        raw_weather = raw_weather.rename(
-            {col: col.lower() for col in raw_weather.columns}
-        )
-        weather_ms = (time.monotonic() - weather_start) * 1000
-        context.log.info(
-            "Weather mart query completed in %.0fms (%d rows)",
-            weather_ms,
-            raw_weather.shape[0],
-        )
-
-        if raw_weather.shape[0] < _MIN_ROWS:
-            raise Failure(
-                description=(
-                    f"Source mart {_WEATHER_MART} has {raw_weather.shape[0]} rows, "
-                    f"need at least {_MIN_ROWS}. Refusing to publish a "
-                    f"broken-looking dashboard."
-                ),
-            )
-
-        missing_weather = [
-            c for c in _WEATHER_PERFORMANCE_COLUMNS if c not in raw_weather.columns
-        ]
-        if missing_weather:
-            raise Failure(
-                description=(
-                    f"Mart {_WEATHER_MART} is missing expected columns: "
-                    f"{missing_weather}. Check dbt model schema."
-                ),
-            )
 
         # --- Project columns ---
         daily_df = raw_daily.select(list(_DAILY_PERFORMANCE_COLUMNS))
         weather_df = raw_weather.select(list(_WEATHER_PERFORMANCE_COLUMNS))
 
         # --- Build assets dimension ---
-        # ``asset_capacity_mw`` and ``asset_size_category`` are in the daily
-        # mart; ``inferred_asset_type`` is in the weather mart (it is a model
-        # inference, not a generation concept).  Join on asset_id then rename
-        # to the data-contract column names.
-        daily_dim = raw_daily.select(list(_DAILY_ASSET_DIM_COLUMNS)).unique()
-        weather_type = raw_weather.select(["asset_id", "inferred_asset_type"]).unique(
-            subset=["asset_id"]
-        )
-        asset_id_suffix = pl.col("asset_id").str.split("_").list.last()
+        # Real site name, capacity, size, coordinates, and region come from the
+        # ``dim_asset`` mart (seeded from the fleet registry). Compute a display
+        # name and rename to the data-contract names.
+        dim = raw_dim.select(list(_DIM_COLUMNS)).unique(subset=["asset_id"])
         display_name_expr = (
-            pl.col("inferred_asset_type").str.to_titlecase()
-            + pl.lit(" Asset ")
-            + asset_id_suffix
+            pl.col("asset_name")
             + pl.lit(" (")
             + pl.col("asset_capacity_mw").cast(pl.Int64).cast(pl.Utf8)
-            + pl.lit(" MW)")
+            + pl.lit(" MW ")
+            + pl.col("asset_type")
+            + pl.lit(")")
         )
-        assets_df = (
-            daily_dim.join(weather_type, on="asset_id", how="left")
-            .with_columns(display_name_expr.alias("display_name"))
-            .rename(
-                {
-                    "inferred_asset_type": "asset_type",
-                    "asset_capacity_mw": "capacity_mw",
-                    "asset_size_category": "size_category",
-                }
+        assets_df = dim.with_columns(
+            display_name_expr.alias("display_name")
+        ).rename(
+            {
+                "asset_name": "name",
+                "asset_capacity_mw": "capacity_mw",
+                "asset_size_category": "size_category",
+            }
+        )
+        asset_type_counts = {
+            str(row["asset_type"]): int(row["count"])
+            for row in assets_df.group_by("asset_type").len(name="count").iter_rows(
+                named=True
             )
-        )
+        }
 
         # --- Build manifest ---
         try:
@@ -243,6 +255,8 @@ def waga_dashboard_export_build(
                 "end": str(daily_df["date"].max()),
             },
             "asset_count": int(assets_df.shape[0]),
+            "asset_type_counts": asset_type_counts,
+            "weather_source": "snowflake",
             "row_counts": {
                 "daily_performance": daily_df.shape[0],
                 "weather_performance": weather_df.shape[0],

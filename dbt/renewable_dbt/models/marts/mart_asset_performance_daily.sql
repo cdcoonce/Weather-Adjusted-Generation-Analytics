@@ -19,6 +19,7 @@ asset_daily_performance AS (
         g.date,
 
         -- Asset info
+        g.asset_type,
         g.asset_capacity_mw,
         g.asset_size_category,
 
@@ -28,6 +29,14 @@ asset_daily_performance AS (
         g.total_curtailment_mwh,
         g.avg_hourly_net_mwh,
         g.peak_hourly_net_mwh,
+
+        -- Technology-specific metrics (null where not applicable)
+        g.avg_soc_pct,
+        g.total_charge_mwh,
+        g.total_discharge_mwh,
+        g.total_fuel_mmbtu,
+        g.avg_heat_rate_btu_kwh,
+        g.total_co2_tonnes,
 
         -- Capacity factor
         g.daily_capacity_factor,

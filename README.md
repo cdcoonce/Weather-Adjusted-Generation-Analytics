@@ -156,10 +156,12 @@ The four `dashboard_exports/*.json` files (schema v2.0) carry per-technology
 metrics — battery SOC/throughput, gas fuel/heat-rate/CO₂ — alongside the shared
 generation/capacity-factor columns.
 
-> **Scope note:** the mixed fleet is the *local dashboard* dataset. The Snowflake
-> ingestion + contracted dbt marts remain wind/solar-only (they infer asset type
-> from weather correlation); extending those marts to storage/thermal is a
-> separate, warehouse-dependent change.
+> **One fleet, both paths.** The same 12-asset fleet flows through the Snowflake
+> pipeline too: ingestion emits an explicit `asset_type` plus battery/gas
+> columns, the dbt marts branch scoring by technology (weather-adjusted for
+> wind/solar, realized round-trip efficiency for battery, heat-rate efficiency
+> for gas), and the export produces the identical v2.0 schema. The local path is
+> the no-warehouse way to build the same dashboard.
 
 ---
 
@@ -192,8 +194,9 @@ Weather_Adjusted_Generation_Analytics/
 │   ├── models/
 │   │   ├── staging/{weather,generation}/
 │   │   ├── intermediate/
-│   │   ├── marts/
+│   │   ├── marts/                  # incl. dim_asset (asset dimension)
 │   │   └── semantic_models/
+│   ├── seeds/                      # asset_dimension.csv (generated from fleet.FLEET)
 │   └── profiles/                   # Snowflake key-pair auth
 │
 ├── tests/                          # pytest unit tests

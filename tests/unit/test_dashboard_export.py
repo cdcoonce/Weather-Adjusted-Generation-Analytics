@@ -47,6 +47,7 @@ def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
         {
             "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
             "DATE": [f"2026-04-{(i % 28) + 1:02d}" for i in range(rows)],
+            "ASSET_TYPE": ["wind" for _ in range(rows)],
             "TOTAL_NET_GENERATION_MWH": [100.0 + i for i in range(rows)],
             "DAILY_CAPACITY_FACTOR": [0.4 for _ in range(rows)],
             "AVG_AVAILABILITY_PCT": [98.0 for _ in range(rows)],
@@ -60,10 +61,33 @@ def _make_valid_mart_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
             "AVG_GHI": [450.0 for _ in range(rows)],
             "AVG_TEMPERATURE_C": [18.5 for _ in range(rows)],
             "DATA_COMPLETENESS_PCT": [100.0 for _ in range(rows)],
+            # Technology-specific columns (null for wind in this fixture):
+            "AVG_SOC_PCT": [None for _ in range(rows)],
+            "TOTAL_CHARGE_MWH": [None for _ in range(rows)],
+            "TOTAL_DISCHARGE_MWH": [None for _ in range(rows)],
+            "TOTAL_FUEL_MMBTU": [None for _ in range(rows)],
+            "AVG_HEAT_RATE_BTU_KWH": [None for _ in range(rows)],
+            "TOTAL_CO2_TONNES": [None for _ in range(rows)],
             # Real mart column names (not the renamed data-contract names):
             "ASSET_CAPACITY_MW": [50.0 for _ in range(rows)],
             "ASSET_SIZE_CATEGORY": ["medium" for _ in range(rows)],
             "UNUSED_COLUMN": ["noise"] * rows,
+        }
+    )
+
+
+def _make_valid_dim_df(rows: int = _MIN_ROWS + 5) -> pl.DataFrame:
+    """Return a dim_asset-shaped DataFrame with uppercase columns like Snowflake."""
+    return pl.DataFrame(
+        {
+            "ASSET_ID": [f"ASSET_{i:03d}" for i in range(rows)],
+            "ASSET_NAME": [f"Site {i:03d}" for i in range(rows)],
+            "ASSET_TYPE": ["wind" for _ in range(rows)],
+            "ASSET_CAPACITY_MW": [50.0 for _ in range(rows)],
+            "ASSET_SIZE_CATEGORY": ["Medium" for _ in range(rows)],
+            "LATITUDE": [35.0 for _ in range(rows)],
+            "LONGITUDE": [-100.0 for _ in range(rows)],
+            "REGION": ["ERCOT" for _ in range(rows)],
         }
     )
 
@@ -177,12 +201,13 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     export_dir = tmp_path / "exports"
     daily_df = _make_valid_mart_df()
     weather_df = _make_valid_weather_mart_df()
+    dim_df = _make_valid_dim_df()
     mock_resource, mock_conn = _make_mock_snowflake()
 
     with (
         patch(
             "weather_analytics.assets.analytics.dashboard_export.pl.read_database",
-            side_effect=[daily_df, weather_df],
+            side_effect=[daily_df, weather_df, dim_df],
         ),
         patch(
             "weather_analytics.assets.analytics.dashboard_export._EXPORT_DIR",
@@ -198,7 +223,7 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     assert result.metadata["weather_performance_bytes"] > 0
     assert result.metadata["assets_bytes"] > 0
     assert result.metadata["manifest_bytes"] > 0
-    assert result.metadata["schema_version"] == "1.0"
+    assert result.metadata["schema_version"] == "2.0"
 
     # All 4 files were written
     assert (export_dir / _DAILY_PERFORMANCE_FILE).exists()
@@ -220,10 +245,14 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     first_weather = weather_records[0]
     assert set(first_weather.keys()) == set(_WEATHER_PERFORMANCE_COLUMNS)
 
-    # assets.json has display_name computed
+    # assets.json has display_name + real dimension fields from dim_asset
     assets_records = json.loads((export_dir / _ASSETS_FILE).read_text())
     assert isinstance(assets_records, list)
     assert all("display_name" in r for r in assets_records)
+    first_asset = assets_records[0]
+    for field in ("name", "region", "latitude", "longitude", "capacity_mw"):
+        assert field in first_asset
+    assert first_asset["name"] in first_asset["display_name"]
 
     # manifest.json is valid JSON with expected keys
     manifest = json.loads((export_dir / _MANIFEST_FILE).read_text())
@@ -231,7 +260,7 @@ def test_build_writes_all_four_files(tmp_path: Path) -> None:
     assert "date_range" in manifest
     assert "asset_count" in manifest
     assert "row_counts" in manifest
-    assert manifest["schema_version"] == "1.0"
+    assert manifest["schema_version"] == "2.0"
 
     # Connection closed
     mock_conn.close.assert_called_once()

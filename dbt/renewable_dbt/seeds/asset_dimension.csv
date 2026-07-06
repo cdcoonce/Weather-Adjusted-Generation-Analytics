@@ -1,0 +1,13 @@
+asset_id,asset_name,asset_type,capacity_mw,latitude,longitude,region
+ASSET_001,Roscoe Ridge,wind,150,32.45,-100.54,ERCOT
+ASSET_002,Buffalo Ridge,wind,100,44.3,-96.2,MISO
+ASSET_003,Cheyenne Mesa,wind,120,41.14,-104.82,WECC
+ASSET_004,Storm Lake,wind,80,42.64,-95.2,MISO
+ASSET_005,Mojave Flats,solar,90,35.01,-117.3,CAISO
+ASSET_006,Gila Bend,solar,75,32.95,-112.72,WECC
+ASSET_007,Pecos Plains,solar,60,31.42,-103.49,ERCOT
+ASSET_008,Boulder Basin,solar,45,35.98,-114.84,WECC
+ASSET_009,Moss Landing Cells,battery,100,36.8,-121.78,CAISO
+ASSET_010,Angleton Store,battery,60,29.17,-95.43,ERCOT
+ASSET_011,Deer Park CCGT,gas,200,29.7,-95.12,ERCOT
+ASSET_012,Sunrise Peaker,gas,90,35.35,-119.02,CAISO

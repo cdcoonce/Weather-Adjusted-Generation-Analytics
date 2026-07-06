@@ -9,11 +9,18 @@ WITH source_data AS (
     SELECT
         timestamp,
         asset_id,
+        asset_type,
         gross_generation_mwh,
         net_generation_mwh,
         curtailment_mwh,
         availability_pct,
         asset_capacity_mw,
+        soc_pct,
+        charge_mwh,
+        discharge_mwh,
+        fuel_mmbtu,
+        heat_rate_btu_kwh,
+        co2_tonnes,
         _dlt_load_id
     FROM {{ source('waga_raw', 'generation') }}
 ),
@@ -30,6 +37,7 @@ transformed AS (
         -- Primary keys
         timestamp::TIMESTAMP_NTZ AS timestamp,
         asset_id::VARCHAR AS asset_id,
+        asset_type::VARCHAR AS asset_type,
 
         -- Generation measurements
         ROUND(gross_generation_mwh::FLOAT, 4) AS gross_generation_mwh,
@@ -37,6 +45,14 @@ transformed AS (
         ROUND(curtailment_mwh::FLOAT, 4) AS curtailment_mwh,
         ROUND(availability_pct::FLOAT, 2) AS availability_pct,
         ROUND(asset_capacity_mw::FLOAT, 2) AS asset_capacity_mw,
+
+        -- Technology-specific measurements (null where not applicable)
+        ROUND(soc_pct::FLOAT, 2) AS soc_pct,
+        ROUND(charge_mwh::FLOAT, 4) AS charge_mwh,
+        ROUND(discharge_mwh::FLOAT, 4) AS discharge_mwh,
+        ROUND(fuel_mmbtu::FLOAT, 4) AS fuel_mmbtu,
+        ROUND(heat_rate_btu_kwh::FLOAT, 2) AS heat_rate_btu_kwh,
+        ROUND(co2_tonnes::FLOAT, 4) AS co2_tonnes,
 
         -- Derived time features
         EXTRACT(HOUR FROM timestamp) AS hour_of_day,
@@ -97,8 +113,13 @@ transformed AS (
             ELSE TRUE
         END AS is_data_valid,
 
+        -- Only weather-driven assets are expected to always produce when up;
+        -- idle battery/gas hours are normal dispatch, not anomalies.
         CASE
-            WHEN net_generation_mwh = 0 AND availability_pct > 0 THEN TRUE
+            WHEN net_generation_mwh = 0
+                AND availability_pct > 0
+                AND asset_type IN ('wind', 'solar')
+            THEN TRUE
             ELSE FALSE
         END AS is_zero_generation_anomaly
 
