@@ -19,8 +19,15 @@ sources:
             tests:
               - not_null
 
+          - name: asset_type
+            description: "Technology: wind, solar, battery, or gas"
+            tests:
+              - not_null
+              - accepted_values:
+                  values: ['wind', 'solar', 'battery', 'gas']
+
           - name: gross_generation_mwh
-            description: "Gross generation in MWh (before losses)"
+            description: "Gross generation in MWh (before losses); battery = discharge"
             tests:
               - not_null
               - dbt_utils.accepted_range:
@@ -28,12 +35,34 @@ sources:
                   inclusive: true
 
           - name: net_generation_mwh
-            description: "Net generation in MWh (after losses)"
+            description: "Net generation in MWh (after losses); negative for a charging battery"
             tests:
               - not_null
+              # A charging battery is a net load (negative). Non-negativity only
+              # holds for the generating technologies.
               - dbt_utils.accepted_range:
                   min_value: 0
                   inclusive: true
+                  config:
+                    where: "asset_type <> 'battery'"
+
+          - name: soc_pct
+            description: "Battery state of charge (%); null for non-storage"
+
+          - name: charge_mwh
+            description: "Battery energy charged this hour (MWh); null for non-storage"
+
+          - name: discharge_mwh
+            description: "Battery energy discharged this hour (MWh); null for non-storage"
+
+          - name: fuel_mmbtu
+            description: "Gas fuel burned this hour (MMBtu); null for non-thermal"
+
+          - name: heat_rate_btu_kwh
+            description: "Gas heat rate (Btu/kWh); null for non-thermal"
+
+          - name: co2_tonnes
+            description: "Gas CO2 emissions this hour (tonnes); null for non-thermal"
 
           - name: curtailment_mwh
             description: "Curtailed energy in MWh"

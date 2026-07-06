@@ -14,8 +14,15 @@ models:
         tests:
           - not_null
 
+      - name: asset_type
+        description: "Technology: wind, solar, battery, or gas"
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['wind', 'solar', 'battery', 'gas']
+
       - name: net_generation_mwh
-        description: "Net generation in MWh"
+        description: "Net generation in MWh (negative for a charging battery)"
         tests:
           - not_null
 
@@ -23,10 +30,14 @@ models:
         description: "Capacity factor (net generation / capacity)"
         tests:
           - not_null
+          # A charging battery has a negative capacity factor; the 0-1.1 band
+          # only applies to the generating technologies.
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 1.1
               inclusive: true
+              config:
+                where: "asset_type <> 'battery'"
 
       - name: is_data_valid
         description: "Flag indicating data passes validation rules"
