@@ -233,8 +233,16 @@ def simulate_fleet(
         )
 
     # --- 5. Renewable curtailment on oversupply ---
+    # Masked divide: np.where evaluates both branches, so a plain
+    # oversupply/total_renewable emits a 0/0 RuntimeWarning on hours (or
+    # fleets) with no renewables.
     oversupply = np.clip(total_renewable - demand, 0.0, None)
-    curtail_share = np.where(total_renewable > 0, oversupply / total_renewable, 0.0)
+    curtail_share = np.divide(
+        oversupply,
+        total_renewable,
+        out=np.zeros_like(oversupply),
+        where=total_renewable > 0,
+    )
 
     rows: list[pl.DataFrame] = []
     ts_list = timestamps
