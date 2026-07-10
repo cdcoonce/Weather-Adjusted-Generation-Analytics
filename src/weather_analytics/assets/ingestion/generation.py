@@ -20,10 +20,18 @@ from weather_analytics.resources.dlt_resource import DltIngestionResource
 
 GENERATION_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
 
+# Warm-up lookback: simulate this many days before the partition so battery
+# SOC and the dispatch rank signal reach a realistic trajectory (see
+# docs/superpowers/specs/2026-07-09-warmup-lookback-design.md).
+WARMUP_DAYS = 7
+
 
 def _partition_seed(partition_key: str) -> int:
-    """Deterministic per-day seed so re-runs merge idempotently and weather and
-    generation ingestion stay mutually consistent for the same partition."""
+    """Deterministic per-day physics seed so re-runs merge idempotently.
+
+    Weather consistency with the weather ingestion asset no longer depends on
+    this seed — synthetic weather is seeded per calendar day internally.
+    """
     return date.fromisoformat(partition_key).toordinal()
 
 
@@ -91,6 +99,7 @@ def waga_generation_ingestion(
         start_date=start,
         end_date=end,
         random_seed=_partition_seed(partition_key),
+        warmup_days=WARMUP_DAYS,
     )
     row_count = len(df)
     asset_count = len(ASSET_CONFIGS)

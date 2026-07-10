@@ -6,6 +6,7 @@ and that the asset generates the expected number of records.
 
 from __future__ import annotations
 
+from datetime import datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -159,3 +160,31 @@ def test_weather_ingestion_raises_failure_on_empty_data() -> None:
                 context=context,
                 dlt_ingestion=fake_dlt_resource,
             )
+
+
+@pytest.mark.unit
+def test_weather_ingestion_uses_default_weather_seed() -> None:
+    """The weather asset must NOT pass a per-partition seed (per-day seeding
+    inside synthetic_weather keeps it consistent with generation)."""
+    fake_df = pl.DataFrame(
+        {"asset_id": ["ASSET_001"], "timestamp": [datetime(2023, 6, 15)]}
+    )
+    fake_load_info = SimpleNamespace(
+        loads_ids=["load_999"],
+        has_failed_jobs=False,
+        load_packages=[SimpleNamespace(schema_update={}, jobs={"completed_jobs": []})],
+    )
+    fake_pipeline = MagicMock()
+    fake_pipeline.run.return_value = fake_load_info
+
+    fake_dlt_resource = MagicMock()
+    fake_dlt_resource.create_pipeline.return_value = fake_pipeline
+
+    with patch(
+        "weather_analytics.assets.ingestion.weather.generate_weather_data",
+        return_value=fake_df,
+    ) as gen:
+        context = build_asset_context(partition_key="2023-06-15")
+        waga_weather_ingestion(context=context, dlt_ingestion=fake_dlt_resource)
+
+    assert "random_seed" not in gen.call_args.kwargs

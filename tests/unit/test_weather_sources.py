@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import numpy as np
 import polars as pl
 import pytest
@@ -65,3 +67,30 @@ def test_get_weather_falls_back_to_synthetic_on_failure(monkeypatch) -> None:
     df, source = get_weather(FLEET, _START, _END, use_real=True)
     assert source == "synthetic"
     assert df.height == 48 * len(FLEET)
+
+
+def test_synthetic_weather_day_slice_matches_standalone_day() -> None:
+    """A day inside a multi-day window equals the same day generated alone."""
+    window = weather_sources.synthetic_weather(
+        FLEET, "2023-06-08T00:00:00", "2023-06-15T23:00:00", random_seed=42
+    )
+    day = weather_sources.synthetic_weather(
+        FLEET, "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=42
+    )
+    sliced = window.filter(pl.col("timestamp") >= datetime(2023, 6, 15))
+    assert sliced.equals(day)
+
+
+def test_synthetic_weather_partial_day_window_consistent() -> None:
+    """Partial-day windows reproduce the same values as full-day windows."""
+    full = weather_sources.synthetic_weather(
+        FLEET, "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=42
+    )
+    partial = weather_sources.synthetic_weather(
+        FLEET, "2023-06-15T06:00:00", "2023-06-15T18:00:00", random_seed=42
+    )
+    expected = full.filter(
+        (pl.col("timestamp") >= datetime(2023, 6, 15, 6))
+        & (pl.col("timestamp") <= datetime(2023, 6, 15, 18))
+    )
+    assert partial.equals(expected)

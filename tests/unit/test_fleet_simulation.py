@@ -5,10 +5,14 @@ All offline: uses synthetic weather so there is no network dependency.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import polars as pl
 import pytest
 
 from weather_analytics.mock_data.fleet import FLEET
+from weather_analytics.mock_data.generate_generation import generate_generation_data
+from weather_analytics.mock_data.generate_weather import generate_weather_data
 from weather_analytics.mock_data.local_export import (
     SCHEMA_VERSION,
     build_bundle,
@@ -118,3 +122,119 @@ def test_build_local_exports_writes_four_files(tmp_path) -> None:
         assert (tmp_path / name).exists()
     assert manifest["weather_source"] == "synthetic"
     assert manifest["asset_count"] == len(FLEET)
+
+
+def test_warmup_equals_wide_window_filtered() -> None:
+    """warmup_days=K is exactly a K-day-earlier window filtered to [start, end]."""
+    warm = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=7,
+        warmup_days=7,
+    )
+    wide = simulate_fleet(
+        "2023-06-08T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=7,
+    )
+    expected = wide.generation.filter(
+        pl.col("timestamp") >= datetime(2023, 6, 15)
+    )
+    assert warm.generation.equals(expected)
+
+
+def test_warmup_output_bounded_to_requested_window() -> None:
+    result = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        warmup_days=7,
+    )
+    for frame in (result.generation, result.weather):
+        assert frame["timestamp"].min() == datetime(2023, 6, 15, 0)
+        assert frame["timestamp"].max() == datetime(2023, 6, 15, 23)
+
+
+def test_warmup_battery_soc_not_reset_to_half() -> None:
+    """With warm-up, the target day's first battery SOC is off the 50% cold start."""
+    result = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        warmup_days=7,
+    )
+    first_soc = (
+        result.generation.filter(pl.col("asset_type") == "battery")
+        .sort(["asset_id", "timestamp"])
+        .group_by("asset_id", maintain_order=True)
+        .first()["soc_pct"]
+    )
+    assert all(abs(v - 50.0) > 0.5 for v in first_soc)
+
+
+def test_battery_net_negative_over_multiday_window() -> None:
+    """Round-trip + parasitic losses make battery net generation negative overall."""
+    result = simulate_fleet(
+        "2023-06-01T00:00:00",
+        "2023-06-14T23:00:00",
+        FLEET,
+        use_real_weather=False,
+    )
+    battery_net = (
+        result.generation.filter(pl.col("asset_type") == "battery")
+        .select(pl.col("net_generation_mwh").sum())
+        .item()
+    )
+    assert battery_net < 0.0
+
+
+def test_weather_seed_independent_of_physics_seed() -> None:
+    """Same weather_seed => identical weather even when random_seed differs."""
+    a = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=1,
+    )
+    b = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=2,
+    )
+    assert a.weather.equals(b.weather)
+    assert not a.generation.equals(b.generation)
+
+
+def test_generate_generation_data_warmup_is_idempotent_and_bounded() -> None:
+    a = generate_generation_data(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=99, warmup_days=7
+    )
+    b = generate_generation_data(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=99, warmup_days=7
+    )
+    assert a.equals(b)
+    assert a["timestamp"].min() == datetime(2023, 6, 15, 0)
+    assert a["timestamp"].max() == datetime(2023, 6, 15, 23)
+
+
+def test_raw_weather_matches_generation_driving_weather() -> None:
+    """The weather ingestion asset's frame equals the weather that drove the
+    generation simulation — the invariant the marts' join relies on."""
+    raw = generate_weather_data("2023-06-15T00:00:00", "2023-06-15T23:00:00")
+    sim = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=123,
+    )
+    assert raw.equals(sim.weather.select(raw.columns))

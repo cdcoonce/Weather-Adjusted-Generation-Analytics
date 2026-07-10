@@ -2,8 +2,9 @@
 
 Thin wrapper over :func:`weather_analytics.mock_data.weather_sources.synthetic_weather`,
 producing the RAW-weather schema (no ``cloud_cover_pct``) for every asset in
-:data:`weather_analytics.mock_data.fleet.FLEET`. Deterministic per seed so the
-weather and generation ingestion assets stay consistent for a given partition.
+:data:`weather_analytics.mock_data.fleet.FLEET`. Seeded per calendar day from
+a shared base so the weather and generation ingestion assets stay consistent
+by construction.
 """
 
 from __future__ import annotations
@@ -14,7 +15,10 @@ from pathlib import Path
 import polars as pl
 
 from weather_analytics.mock_data.fleet import FLEET
-from weather_analytics.mock_data.weather_sources import synthetic_weather
+from weather_analytics.mock_data.weather_sources import (
+    DEFAULT_WEATHER_SEED,
+    synthetic_weather,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +39,7 @@ def generate_weather_data(
     start_date: str,
     end_date: str,
     asset_count: int | None = None,  # noqa: ARG001
-    random_seed: int = 42,
+    random_seed: int = DEFAULT_WEATHER_SEED,
 ) -> pl.DataFrame:
     """Generate realistic hourly weather for the full fleet.
 
@@ -46,8 +50,8 @@ def generate_weather_data(
     asset_count : int | None
         Deprecated / ignored — the fleet is defined by ``fleet.FLEET``.
     random_seed : int
-        Seed for reproducibility (must match the generation asset's seed to keep
-        weather and generation consistent for the same partition).
+        Base seed for the per-calendar-day weather scheme; leave at the default
+        so all callers share one weather realization.
 
     Returns
     -------

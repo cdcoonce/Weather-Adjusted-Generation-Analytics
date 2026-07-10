@@ -15,7 +15,7 @@ Both return the same schema::
 from __future__ import annotations
 
 import logging
-from datetime import datetime
+from datetime import datetime, time, timedelta
 
 import numpy as np
 import polars as pl
@@ -47,6 +47,11 @@ WEATHER_COLUMNS: tuple[str, ...] = (
     "relative_humidity",
     "cloud_cover_pct",
 )
+
+# Shared base seed so every caller (real generators + tests) gets the same
+# per-day weather realization; see ``synthetic_weather``'s per-calendar-day
+# seeding scheme.
+DEFAULT_WEATHER_SEED = 42
 
 
 def _fetch_one(
@@ -122,39 +127,12 @@ def fetch_open_meteo(
     return pl.concat(frames).select(WEATHER_COLUMNS).sort(["timestamp", "asset_id"])
 
 
-def synthetic_weather(
+def _synthetic_weather_span(
     assets: tuple[FleetAsset, ...] | list[FleetAsset],
-    start_date: str,
-    end_date: str,
-    random_seed: int = 42,
+    timestamps: pl.Series,
+    rng: np.random.Generator,
 ) -> pl.DataFrame:
-    """Latitude-aware synthetic hourly weather (offline fallback).
-
-    Physically-plausible seasonal + diurnal signals with autocorrelated noise,
-    parameterized by each site's latitude so Southwest solar sites are hotter
-    and sunnier than northern wind sites.
-
-    Parameters
-    ----------
-    assets : sequence of FleetAsset
-        Fleet to generate weather for.
-    start_date, end_date : str
-        ISO datetimes (inclusive) at hourly resolution.
-    random_seed : int
-        Seed for reproducibility.
-
-    Returns
-    -------
-    pl.DataFrame
-        Weather frame in :data:`WEATHER_COLUMNS` order.
-    """
-    rng = np.random.default_rng(random_seed)
-    timestamps = pl.datetime_range(
-        start=datetime.fromisoformat(start_date),
-        end=datetime.fromisoformat(end_date),
-        interval="1h",
-        eager=True,
-    )
+    """Synthetic weather for all assets over one contiguous time axis."""
     hours = timestamps.dt.hour().to_numpy()
     doy = timestamps.dt.ordinal_day().to_numpy()
     n = len(timestamps)
@@ -219,7 +197,63 @@ def synthetic_weather(
                 }
             )
         )
-    return pl.concat(frames).select(WEATHER_COLUMNS).sort(["timestamp", "asset_id"])
+    return pl.concat(frames)
+
+
+def synthetic_weather(
+    assets: tuple[FleetAsset, ...] | list[FleetAsset],
+    start_date: str,
+    end_date: str,
+    random_seed: int = DEFAULT_WEATHER_SEED,
+) -> pl.DataFrame:
+    """Latitude-aware synthetic hourly weather (offline fallback).
+
+    Physically-plausible seasonal + diurnal signals with autocorrelated noise,
+    parameterized by each site's latitude so Southwest solar sites are hotter
+    and sunnier than northern wind sites.
+
+    Each calendar day is generated independently with seed
+    ``random_seed + day.toordinal()`` and the result filtered to the requested
+    window, so a given day's weather is identical no matter which window it
+    appears in (warm-up day or its own partition).
+
+    Parameters
+    ----------
+    assets : sequence of FleetAsset
+        Fleet to generate weather for.
+    start_date, end_date : str
+        ISO datetimes (inclusive) at hourly resolution.
+    random_seed : int
+        Base seed for reproducibility; each calendar day adds its ordinal.
+
+    Returns
+    -------
+    pl.DataFrame
+        Weather frame in :data:`WEATHER_COLUMNS` order.
+    """
+    start_dt = datetime.fromisoformat(start_date)
+    end_dt = datetime.fromisoformat(end_date)
+
+    day_frames: list[pl.DataFrame] = []
+    day = start_dt.date()
+    while day <= end_dt.date():
+        day_start = datetime.combine(day, time.min)
+        day_ts = pl.datetime_range(
+            start=day_start,
+            end=day_start + timedelta(hours=23),
+            interval="1h",
+            eager=True,
+        )
+        rng = np.random.default_rng(random_seed + day.toordinal())
+        day_frames.append(_synthetic_weather_span(assets, day_ts, rng))
+        day += timedelta(days=1)
+
+    return (
+        pl.concat(day_frames)
+        .filter((pl.col("timestamp") >= start_dt) & (pl.col("timestamp") <= end_dt))
+        .select(WEATHER_COLUMNS)
+        .sort(["timestamp", "asset_id"])
+    )
 
 
 def get_weather(
@@ -227,7 +261,7 @@ def get_weather(
     start_date: str,
     end_date: str,
     use_real: bool = True,
-    random_seed: int = 42,
+    random_seed: int = DEFAULT_WEATHER_SEED,
 ) -> tuple[pl.DataFrame, str]:
     """Return hourly weather and its provenance label.
 
@@ -248,6 +282,7 @@ def get_weather(
 
 
 __all__ = [
+    "DEFAULT_WEATHER_SEED",
     "WEATHER_COLUMNS",
     "fetch_open_meteo",
     "get_weather",

@@ -7,9 +7,12 @@ wind, solar, battery, and gas — carrying an explicit ``asset_type`` plus
 technology-specific columns (battery SOC/throughput, gas fuel/heat-rate/CO2).
 
 The Dagster ingestion asset merges these records into Snowflake RAW; dlt evolves
-the RAW schema to add the new columns. Weather here is synthetic (deterministic
-per seed) so ingestion is reproducible; the live Open-Meteo pull is a
-local-dashboard feature (see ``simulate_fleet(use_real_weather=True)``).
+the RAW schema to add the new columns. Weather here is synthetic and seeded per
+calendar day (shared ``weather_seed`` base), so ingestion is reproducible and
+consistent with the weather ingestion asset by construction.
+
+The live Open-Meteo pull is a local-dashboard feature (see
+``simulate_fleet(use_real_weather=True)``).
 """
 
 from __future__ import annotations
@@ -37,6 +40,7 @@ def generate_generation_data(
     end_date: str,
     asset_configs: dict[str, dict[str, float | str]] | None = None,  # noqa: ARG001
     random_seed: int = 42,
+    warmup_days: int = 0,
 ) -> pl.DataFrame:
     """Generate realistic hourly generation for the full fleet.
 
@@ -48,7 +52,11 @@ def generate_generation_data(
         Deprecated / ignored — the fleet is defined by ``fleet.FLEET``. Kept for
         backward compatibility with earlier callers.
     random_seed : int
-        Seed for the (synthetic) weather and all stochastic physics.
+        Seed for the stochastic physics; synthetic weather is seeded
+        separately (see ``weather_seed`` on :func:`simulate_fleet`).
+    warmup_days : int
+        Number of days to simulate before ``start_date`` to warm up stateful
+        models (e.g., battery SOC). Output is filtered to [start_date, end_date].
 
     Returns
     -------
@@ -67,7 +75,12 @@ def generate_generation_data(
         len(FLEET),
     )
     result = simulate_fleet(
-        start_date, end_date, FLEET, use_real_weather=False, random_seed=random_seed
+        start_date,
+        end_date,
+        FLEET,
+        use_real_weather=False,
+        random_seed=random_seed,
+        warmup_days=warmup_days,
     )
     logger.info(
         "Generation data completed: %d rows, %d assets",
