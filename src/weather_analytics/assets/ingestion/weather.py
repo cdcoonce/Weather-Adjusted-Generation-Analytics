@@ -1,7 +1,6 @@
 """Weather ingestion asset — generates mock data into Snowflake RAW."""
 
 from collections.abc import Iterator
-from datetime import date
 
 import dlt
 from dagster import (
@@ -21,12 +20,6 @@ WEATHER_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
 # Must match len(ASSET_CONFIGS) so weather and generation assets
 # produce data for the same set of assets.
 WEATHER_ASSET_COUNT = len(ASSET_CONFIGS)
-
-
-def _partition_seed(partition_key: str) -> int:
-    """Deterministic per-day seed (matches the generation asset) so weather and
-    generation ingestion stay mutually consistent for the same partition."""
-    return date.fromisoformat(partition_key).toordinal()
 
 
 @dlt.resource(
@@ -93,7 +86,6 @@ def waga_weather_ingestion(
         start_date=start,
         end_date=end,
         asset_count=WEATHER_ASSET_COUNT,
-        random_seed=_partition_seed(partition_key),
     )
     row_count = len(df)
 
