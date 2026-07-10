@@ -22,6 +22,7 @@ pytestmark = pytest.mark.unit
 
 _SCRIPT = Path(__file__).parents[2] / "scripts" / "run_scheduled.py"
 _NO_DNS = "no dns"
+_UNAVAILABLE = "unavailable"
 
 
 def _load_module():
@@ -253,6 +254,100 @@ class TestRunStepWithRetries:
         assert log.flushes >= 1
 
 
+class TestHoldWakeAssertion:
+    def test_spawns_caffeinate_sidecar_bound_to_pid(self):
+        spawned: list[list[str]] = []
+
+        def popen(cmd, **kwargs):
+            spawned.append(list(cmd))
+            return SimpleNamespace(pid=999)
+
+        process = run_scheduled.hold_wake_assertion(
+            1234, emit=lambda _msg: None, popen=popen
+        )
+
+        assert process is not None
+        assert spawned == [["/usr/bin/caffeinate", "-i", "-s", "-w", "1234"]]
+
+    def test_missing_caffeinate_is_non_fatal(self):
+        messages: list[str] = []
+
+        def popen(cmd, **kwargs):
+            raise FileNotFoundError(_UNAVAILABLE)
+
+        process = run_scheduled.hold_wake_assertion(
+            1234, emit=messages.append, popen=popen
+        )
+
+        assert process is None
+        assert any("without wake assertion" in message for message in messages)
+
+
+class TestReportOutcome:
+    def _report(self, returncode, monkeypatch, url=None):
+        notifications: list[list[str]] = []
+        pings: list[str] = []
+        if url is None:
+            monkeypatch.delenv("WAGA_HEALTHCHECK_URL", raising=False)
+        else:
+            monkeypatch.setenv("WAGA_HEALTHCHECK_URL", url)
+
+        def runner(cmd, **kwargs):
+            notifications.append(list(cmd))
+            return SimpleNamespace(returncode=0)
+
+        def urlopen(target, timeout=None):
+            pings.append(target)
+            return SimpleNamespace(status=200)
+
+        run_scheduled.report_outcome(
+            "daily",
+            returncode,
+            Path("/x/logs/scheduled-daily-1.log"),
+            emit=lambda _msg: None,
+            runner=runner,
+            urlopen=urlopen,
+        )
+        return notifications, pings
+
+    def test_success_pings_but_does_not_notify(self, monkeypatch):
+        notifications, pings = self._report(0, monkeypatch, url="https://hc.io/abc")
+
+        assert notifications == []
+        assert pings == ["https://hc.io/abc"]
+
+    def test_failure_notifies_and_pings_fail_endpoint(self, monkeypatch):
+        notifications, pings = self._report(7, monkeypatch, url="https://hc.io/abc")
+
+        assert len(notifications) == 1
+        assert notifications[0][0] == "/usr/bin/osascript"
+        assert "daily" in notifications[0][2]
+        assert pings == ["https://hc.io/abc/fail"]
+
+    def test_no_url_means_no_ping(self, monkeypatch):
+        _notifications, pings = self._report(0, monkeypatch, url=None)
+
+        assert pings == []
+
+    def test_ping_failure_is_swallowed(self, monkeypatch):
+        monkeypatch.setenv("WAGA_HEALTHCHECK_URL", "https://hc.io/abc")
+        messages: list[str] = []
+
+        def urlopen(target, timeout=None):
+            raise OSError(_UNAVAILABLE)
+
+        run_scheduled.report_outcome(
+            "daily",
+            0,
+            Path("/x/logs/scheduled-daily-1.log"),
+            emit=messages.append,
+            runner=lambda cmd, **kw: SimpleNamespace(returncode=0),
+            urlopen=urlopen,
+        )
+
+        assert any("healthcheck ping failed" in message for message in messages)
+
+
 class TestMainWiring:
     """Pin main()'s chain: preflight -> uv sync --inexact -> steps -> post-steps."""
 
@@ -269,9 +364,17 @@ class TestMainWiring:
             )
             return 5 if fail_on is not None and fail_on in label else 0
 
+        def fake_wake(pid, **_kwargs):
+            calls.append({"kind": "wake-assertion", "pid": pid})
+
+        def fake_outcome(job, returncode, log_path, **_kwargs):
+            calls.append({"kind": "outcome", "job": job, "returncode": returncode})
+
         monkeypatch.setattr(run_scheduled, "REPO", tmp_path)
         monkeypatch.setattr(run_scheduled, "wait_for_network", fake_wait)
         monkeypatch.setattr(run_scheduled, "run_step_with_retries", fake_step)
+        monkeypatch.setattr(run_scheduled, "hold_wake_assertion", fake_wake)
+        monkeypatch.setattr(run_scheduled, "report_outcome", fake_outcome)
         monkeypatch.setenv("DAGSTER_HOME", "sentinel")
         monkeypatch.setattr(sys, "argv", ["run_scheduled.py", "daily"])
         return run_scheduled.main(), calls
@@ -280,17 +383,24 @@ class TestMainWiring:
         code, calls = self._run_main(monkeypatch, tmp_path)
 
         assert code == 0
-        assert calls[0]["kind"] == "network-wait"
+        # Wake assertion is taken before anything else (the machine may
+        # re-sleep ~3 min into a DarkWake window otherwise).
+        assert calls[0]["kind"] == "wake-assertion"
+        assert calls[1]["kind"] == "network-wait"
+        # The outcome is always reported, with the chain's exit code.
+        assert calls[-1] == {"kind": "outcome", "job": "daily", "returncode": 0}
         # Pre-step: uv sync --inexact (inexact so dev extras survive), 3 attempts.
-        assert calls[1]["cmd"][1:] == ["sync", "--inexact"]
-        assert calls[1]["attempts"] == 3
+        step_calls = [c for c in calls if c["kind"] == "step"]
+        sync_call = step_calls[0]
+        assert sync_call["cmd"][1:] == ["sync", "--inexact"]
+        assert sync_call["attempts"] == 3
         # 3 dagster steps + 2 cockpit post-steps, default retry budget.
-        dagster_steps = [c for c in calls if c["kind"] == "step"][1:4]
+        dagster_steps = step_calls[1:4]
         assert all(
             c["cmd"][1:5] == ["run", "python", "-m", "dagster"] for c in dagster_steps
         )
         assert all(c["attempts"] == 2 for c in dagster_steps)
-        post_steps = [c for c in calls if c["kind"] == "step"][4:]
+        post_steps = step_calls[4:]
         assert len(post_steps) == 2
         assert all("cockpit" in " ".join(c["cmd"]) for c in post_steps)
 
@@ -302,6 +412,8 @@ class TestMainWiring:
         assert code == 5
         steps = [c for c in calls if c["kind"] == "step"]
         assert len(steps) == 1  # only the pre-step ran
+        # The failure is still reported (notification + healthcheck /fail).
+        assert calls[-1] == {"kind": "outcome", "job": "daily", "returncode": 5}
 
 
 class TestLaunchdInterpreterContract:
