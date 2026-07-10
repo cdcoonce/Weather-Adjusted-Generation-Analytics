@@ -47,3 +47,21 @@ def test_render_is_valid_parseable_html(dataset, tmp_path):
         pass
 
     _P().feed(out.read_text(encoding="utf-8"))  # raises on malformed markup
+
+
+def test_render_includes_freshness_badge_hook(dataset, tmp_path):
+    """The badge is filled client-side; the template must ship the hook."""
+    out = tmp_path / "index.html"
+    render_dashboard(dataset, out)
+    html = out.read_text(encoding="utf-8")
+    assert 'id="freshness"' in html
+    assert f'data-end="{dataset.manifest.date_range_end}"' in html
+
+
+def test_bundled_app_js_fills_freshness_badge(dataset, tmp_path):
+    """app.js must contain the freshness logic (runs at view time)."""
+    out = tmp_path / "index.html"
+    render_dashboard(dataset, out)
+    html = out.read_text(encoding="utf-8")
+    assert 'getElementById("freshness")' in html
+    assert "days behind" in html

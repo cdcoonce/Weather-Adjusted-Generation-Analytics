@@ -57,6 +57,11 @@
     background: var(--data-green); }
   .badge.sim::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
     background: var(--data-gold); }
+  .badge.fresh::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--data-green); }
+  .badge.stale::before { content: ""; width: 7px; height: 7px; border-radius: 50%;
+    background: var(--data-gold); }
+  #freshness:empty { display: none; }
   .wrap { max-width: 1160px; margin: 0 auto; padding: 12px 24px 64px; }
   .controls { display: flex; flex-wrap: wrap; gap: 14px; margin: 20px 0 8px; }
   .controls label { color: var(--muted); font-size: 0.78rem; font-weight: 500;
@@ -130,6 +135,7 @@
     <span class="badge sim">simulated weather</span>
     {%- endif %}
     <span>&middot; generated {{ manifest.generated_at }}</span>
+    <span id="freshness" class="badge" data-end="{{ manifest.date_range_end }}"></span>
   </div>
 </header>
 <div class="wrap">
