@@ -15,7 +15,7 @@ Both return the same schema::
 from __future__ import annotations
 
 import logging
-from datetime import datetime, timedelta
+from datetime import datetime, time, timedelta
 
 import numpy as np
 import polars as pl
@@ -232,7 +232,7 @@ def synthetic_weather(
     day_frames: list[pl.DataFrame] = []
     day = start_dt.date()
     while day <= end_dt.date():
-        day_start = datetime(day.year, day.month, day.day)
+        day_start = datetime.combine(day, time.min)
         day_ts = pl.datetime_range(
             start=day_start,
             end=day_start + timedelta(hours=23),

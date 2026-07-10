@@ -6,7 +6,7 @@ and that the asset generates the expected number of records.
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import date, datetime
 from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
@@ -158,8 +158,6 @@ def test_generation_ingestion_raises_failure_on_empty_data() -> None:
 @pytest.mark.unit
 def test_generation_ingestion_passes_warmup_and_partition_seed() -> None:
     """The asset requests a 7-day warm-up with the per-partition physics seed."""
-    from datetime import date
-
     fake_df = pl.DataFrame(
         {"asset_id": ["ASSET_001"], "timestamp": [datetime(2023, 6, 15)]}
     )

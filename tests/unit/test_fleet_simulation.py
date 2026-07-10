@@ -5,10 +5,13 @@ All offline: uses synthetic weather so there is no network dependency.
 
 from __future__ import annotations
 
+from datetime import datetime
+
 import polars as pl
 import pytest
 
 from weather_analytics.mock_data.fleet import FLEET
+from weather_analytics.mock_data.generate_generation import generate_generation_data
 from weather_analytics.mock_data.local_export import (
     SCHEMA_VERSION,
     build_bundle,
@@ -122,8 +125,6 @@ def test_build_local_exports_writes_four_files(tmp_path) -> None:
 
 def test_warmup_equals_wide_window_filtered() -> None:
     """warmup_days=K is exactly a K-day-earlier window filtered to [start, end]."""
-    from datetime import datetime
-
     warm = simulate_fleet(
         "2023-06-15T00:00:00",
         "2023-06-15T23:00:00",
@@ -146,8 +147,6 @@ def test_warmup_equals_wide_window_filtered() -> None:
 
 
 def test_warmup_output_bounded_to_requested_window() -> None:
-    from datetime import datetime
-
     result = simulate_fleet(
         "2023-06-15T00:00:00",
         "2023-06-15T23:00:00",
@@ -215,12 +214,6 @@ def test_weather_seed_independent_of_physics_seed() -> None:
 
 
 def test_generate_generation_data_warmup_is_idempotent_and_bounded() -> None:
-    from datetime import datetime
-
-    from weather_analytics.mock_data.generate_generation import (
-        generate_generation_data,
-    )
-
     a = generate_generation_data(
         "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=99, warmup_days=7
     )
