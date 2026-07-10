@@ -23,17 +23,16 @@ the `JOBS` dict in that script.
 
 | Job      | Steps (in order)                                                                 | Assets materialized                                            |
 | -------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `daily`  | 1. `--select waga_weather_ingestion,waga_generation_ingestion --partition <yday>`<br>2. `--select group:default` | The two ingestion assets (partitioned), then the dbt models (`group:default`: `stg_*`, `mart_*`, `metricflow_time_spine`) |
+| `daily`  | 1. `--select waga_weather_ingestion,waga_generation_ingestion --partition <yday>`<br>2. `--select group:default`<br>3. `--select waga_dashboard_export_build` | The two ingestion assets (partitioned), then the dbt models (`group:default`: `stg_*`, `mart_*`, `metricflow_time_spine`), then the cockpit dashboard-export build |
 | `weekly` | 1. `--select waga_correlation_analysis`                                           | The correlation analysis asset                                |
 
 Steps run in order; a non-zero exit **aborts the rest of the chain** and is
 logged as `FAILED (exit N)`.
 
-> **Deliberately excluded:** the dashboard-export assets
-> (`waga_dashboard_export_build` / `waga_dashboard_export_publish`) are **not**
-> scheduled here. They publish to a stale portfolio `master` target and are
-> deferred to a separate thread. Do not add them to `JOBS` without re-pointing
-> that target first.
+> **Deliberately excluded:** `waga_dashboard_export_publish` is **not**
+> scheduled here — publishing to Cloudflare Pages stays a manual
+> `cockpit deploy` decision. (The export **build** was wired into the daily
+> chain when the cockpit replaced the Pyodide dashboard.)
 
 ## Schedule (local time)
 
@@ -88,6 +87,66 @@ from `~/Library/LaunchAgents`.
   `logs/com.charleslikesdata.waga.<job>.out.log` and `...err.log`.
 
 The `logs/` directory is gitignored, so nothing here is committed.
+
+## Health check & troubleshooting
+
+Nothing alerts on a failed run — the only signals are local. Check health with:
+
+```sh
+# Second column is the LAST EXIT CODE per agent: 0 = healthy, 1 = last run failed
+launchctl list | grep waga
+
+# A healthy daily log is ~40 KB; a failed one is typically ~1 KB
+ls -la logs/scheduled-daily-*.log | tail -5
+```
+
+### Known failure mode: no network at wake (observed 2026-07-10)
+
+`launchd` fires the job at 06:00 local — or immediately on wake if the machine
+was asleep — which can be **before the network/DNS is up**. If the source tree
+changed since the last run (e.g. PRs merged the day before), `uv run` rebuilds
+the project and needs PyPI (`hatchling`); with no DNS the build fails and
+step 1 aborts the whole chain:
+
+```
+├─▶ Failed to fetch: `https://pypi.org/simple/hatchling/`
+╰─▶ failed to lookup address information: nodename nor servname provided
+```
+
+The partition for that day is then silently skipped (exit code 1 in
+`launchctl list`, tiny log file). If the tree did NOT change, `uv run` needs no
+network and the run is immune.
+
+### Catch-up runbook (missed partition)
+
+For a miss caught the **same day**, just re-run the job — it targets
+yesterday's partition:
+
+```sh
+uv run python scripts/run_scheduled.py daily
+```
+
+For **older** gaps, materialize each missed date explicitly (always BOTH
+ingestion assets per partition — a partition refreshed on only one asset mixes
+weather/generation seeds in the mart joins), then the dbt models once:
+
+```sh
+uv run dagster asset materialize -m weather_analytics.definitions \
+  --select waga_weather_ingestion,waga_generation_ingestion --partition <YYYY-MM-DD>
+# ...repeat per missed date, then:
+uv run dagster asset materialize -m weather_analytics.definitions --select group:default
+```
+
+Find gaps by comparing `logs/scheduled-daily-*.log` dates, or directly in the
+warehouse: `select distinct timestamp::date from WAGA.raw.generation order by 1`.
+
+### Hardening candidates (not implemented)
+
+- Retry with backoff inside `run_scheduled.py` (a 5-minute retry would have
+  covered the observed DNS-at-wake failure).
+- A later `StartCalendarInterval` (e.g. 07:00) to widen the wake-to-network gap.
+- `uv sync` as a separate, retryable pre-step so the materialize steps
+  themselves never need the network.
 
 ## dbt manifest (first-run note)
 
