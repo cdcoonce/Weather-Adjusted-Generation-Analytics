@@ -5,6 +5,26 @@
    math mirrors weather_analytics.cockpit.charts (keep them in sync). */
 (function () {
   "use strict";
+
+  /* Data-freshness badge. Computed against the VIEWER's clock, not build
+     time — the page is static, so build-time freshness would lie on a stale
+     deploy (exactly the failure mode this badge exists to expose). Data
+     normally runs through yesterday's partition, so <=2 days is "current". */
+  (function () {
+    var badge = document.getElementById("freshness");
+    if (!badge) return;
+    var end = new Date((badge.getAttribute("data-end") || "").replace(" ", "T"));
+    if (isNaN(end.getTime())) return;
+    var days = Math.floor((Date.now() - end.getTime()) / 86400000);
+    if (days <= 2) {
+      badge.className = "badge fresh";
+      badge.textContent = "data current";
+    } else {
+      badge.className = "badge stale";
+      badge.textContent = "data " + days + " days behind";
+    }
+  })();
+
   var el = document.getElementById("cockpit-data");
   if (!el) return;
   var D = JSON.parse(el.textContent);
