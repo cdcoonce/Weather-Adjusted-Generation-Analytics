@@ -7,7 +7,6 @@ and that the asset generates the expected number of records.
 from __future__ import annotations
 
 from datetime import datetime
-from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 
 import polars as pl
@@ -62,24 +61,12 @@ def test_weather_asset_count_matches_generation_configs() -> None:
 
 
 @pytest.mark.unit
-def test_weather_ingestion_emits_expected_metadata() -> None:
+def test_weather_ingestion_emits_expected_metadata(make_fake_dlt) -> None:
     """The asset should emit partition_key, rows_generated, load_id,
     rows_loaded, and has_failed_jobs as output metadata."""
-    fake_load_info = SimpleNamespace(
-        loads_ids=["load_123"],
-        has_failed_jobs=False,
-        load_packages=[
-            SimpleNamespace(
-                schema_update={"weather": {"columns": {}}},
-                jobs={"completed_jobs": []},
-            )
-        ],
+    fake_dlt_resource, _fake_pipeline = make_fake_dlt(
+        load_id="load_123", schema_update={"weather": {"columns": {}}}
     )
-    fake_pipeline = MagicMock()
-    fake_pipeline.run.return_value = fake_load_info
-
-    fake_dlt_resource = MagicMock()
-    fake_dlt_resource.create_pipeline.return_value = fake_pipeline
 
     context = build_asset_context(partition_key="2023-06-15")
 
@@ -97,18 +84,9 @@ def test_weather_ingestion_emits_expected_metadata() -> None:
 
 
 @pytest.mark.unit
-def test_weather_ingestion_generates_correct_row_count() -> None:
+def test_weather_ingestion_generates_correct_row_count(make_fake_dlt) -> None:
     """The dlt resource should receive 240 records (24h * 10 assets)."""
-    fake_load_info = SimpleNamespace(
-        loads_ids=["load_456"],
-        has_failed_jobs=False,
-        load_packages=[SimpleNamespace(schema_update={}, jobs={"completed_jobs": []})],
-    )
-    fake_pipeline = MagicMock()
-    fake_pipeline.run.return_value = fake_load_info
-
-    fake_dlt_resource = MagicMock()
-    fake_dlt_resource.create_pipeline.return_value = fake_pipeline
+    fake_dlt_resource, _fake_pipeline = make_fake_dlt(load_id="load_456")
 
     context = build_asset_context(partition_key="2023-06-15")
 
@@ -121,18 +99,9 @@ def test_weather_ingestion_generates_correct_row_count() -> None:
 
 
 @pytest.mark.unit
-def test_weather_ingestion_calls_pipeline_run() -> None:
+def test_weather_ingestion_calls_pipeline_run(make_fake_dlt) -> None:
     """The asset should call pipeline.run with the dlt resource."""
-    fake_load_info = SimpleNamespace(
-        loads_ids=["load_789"],
-        has_failed_jobs=False,
-        load_packages=[SimpleNamespace(schema_update={}, jobs={"completed_jobs": []})],
-    )
-    fake_pipeline = MagicMock()
-    fake_pipeline.run.return_value = fake_load_info
-
-    fake_dlt_resource = MagicMock()
-    fake_dlt_resource.create_pipeline.return_value = fake_pipeline
+    fake_dlt_resource, fake_pipeline = make_fake_dlt(load_id="load_789")
 
     context = build_asset_context(partition_key="2023-06-15")
 
@@ -163,22 +132,13 @@ def test_weather_ingestion_raises_failure_on_empty_data() -> None:
 
 
 @pytest.mark.unit
-def test_weather_ingestion_uses_default_weather_seed() -> None:
+def test_weather_ingestion_uses_default_weather_seed(make_fake_dlt) -> None:
     """The weather asset must NOT pass a per-partition seed (per-day seeding
     inside synthetic_weather keeps it consistent with generation)."""
     fake_df = pl.DataFrame(
         {"asset_id": ["ASSET_001"], "timestamp": [datetime(2023, 6, 15)]}
     )
-    fake_load_info = SimpleNamespace(
-        loads_ids=["load_999"],
-        has_failed_jobs=False,
-        load_packages=[SimpleNamespace(schema_update={}, jobs={"completed_jobs": []})],
-    )
-    fake_pipeline = MagicMock()
-    fake_pipeline.run.return_value = fake_load_info
-
-    fake_dlt_resource = MagicMock()
-    fake_dlt_resource.create_pipeline.return_value = fake_pipeline
+    fake_dlt_resource, _fake_pipeline = make_fake_dlt(load_id="load_999")
 
     with patch(
         "weather_analytics.assets.ingestion.weather.generate_weather_data",

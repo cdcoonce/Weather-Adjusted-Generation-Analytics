@@ -238,3 +238,34 @@ def test_raw_weather_matches_generation_driving_weather() -> None:
         random_seed=123,
     )
     assert raw.equals(sim.weather.select(raw.columns))
+
+
+def test_warmup_seven_days_washes_out_battery_initial_condition() -> None:
+    """Target-day battery SOC from a 7-day vs an 8-day warm-up agrees within a
+    tight tolerance, pinning WARMUP_DAYS=7 as sufficient for the battery to
+    forget the 50% window-start SOC (spec, Testing item 2).
+
+    Uses a battery-only fleet: with no wind/solar/gas the dispatch signal is
+    pure trig of timestamps, so no physics noise reaches the battery path.
+    Residual day-D differences can come from initial-condition memory OR from
+    the rank-signal denominator (``_rank_signal`` normalizes over the full
+    window, so 7d vs 8d shifts every hour's percentile slightly) — on a
+    failure, check both before blaming SOC convergence.
+    """
+    batteries = tuple(a for a in FLEET if a.asset_type == "battery")
+    assert batteries, "fleet must contain at least one battery"
+
+    kwargs = {"use_real_weather": False, "random_seed": 7}
+    seven = simulate_fleet(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", batteries,
+        warmup_days=7, **kwargs,
+    )
+    eight = simulate_fleet(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", batteries,
+        warmup_days=8, **kwargs,
+    )
+    soc_7 = seven.generation.sort(["asset_id", "timestamp"])["soc_pct"]
+    soc_8 = eight.generation.sort(["asset_id", "timestamp"])["soc_pct"]
+    max_diff = (soc_7 - soc_8).abs().max()
+    assert max_diff is not None
+    assert max_diff < 1.0, f"SOC memory not washed out: max diff {max_diff} pct-points"
