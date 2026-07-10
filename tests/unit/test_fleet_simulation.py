@@ -212,3 +212,21 @@ def test_weather_seed_independent_of_physics_seed() -> None:
     )
     assert a.weather.equals(b.weather)
     assert not a.generation.equals(b.generation)
+
+
+def test_generate_generation_data_warmup_is_idempotent_and_bounded() -> None:
+    from datetime import datetime
+
+    from weather_analytics.mock_data.generate_generation import (
+        generate_generation_data,
+    )
+
+    a = generate_generation_data(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=99, warmup_days=7
+    )
+    b = generate_generation_data(
+        "2023-06-15T00:00:00", "2023-06-15T23:00:00", random_seed=99, warmup_days=7
+    )
+    assert a.equals(b)
+    assert a["timestamp"].min() == datetime(2023, 6, 15, 0)
+    assert a["timestamp"].max() == datetime(2023, 6, 15, 23)
