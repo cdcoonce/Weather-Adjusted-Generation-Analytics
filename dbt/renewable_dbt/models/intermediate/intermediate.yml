@@ -43,12 +43,16 @@ models:
           - not_null
       
       - name: daily_capacity_factor
-        description: "Daily capacity factor"
+        description: "Daily capacity factor (negative for a charging battery)"
         tests:
+          # A charging battery has a negative daily CF; the 0-1.1 band applies
+          # only to the generating technologies (mirrors the mart-level test).
           - dbt_utils.accepted_range:
               min_value: 0
               max_value: 1.1
               inclusive: true
+              config:
+                where: "asset_type <> 'battery'"
       
       - name: total_net_generation_mwh
         description: "Total daily net generation"
