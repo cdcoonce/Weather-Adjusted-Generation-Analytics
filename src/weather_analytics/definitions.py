@@ -1,6 +1,7 @@
 """Dagster Definitions for the Weather Analytics pipeline.
 
-This is the entry point that Dagster Cloud (and ``dagster dev``) loads.
+This is the entry point Dagster loads — ``dagster dev`` for the local UI
+and the launchd-scheduled CLI runs (see ``docs/local-scheduling.md``).
 All assets, resources, schedules, and sensors are registered here.
 """
 

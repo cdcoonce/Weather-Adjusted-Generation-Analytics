@@ -28,7 +28,7 @@ Parquet / API sources
 5. **Analytics** -- Polars correlation analysis writes to `WAGA.ANALYTICS`
 6. **Semantic layer** -- dbt metrics (`daily_generation`, `generation_efficiency`) for downstream BI
 
-All orchestrated by Dagster with asset checks (freshness, row count, value range) and schedules (daily ingestion, daily dbt, weekly analytics).
+All orchestrated by Dagster with asset checks (freshness, row count, value range). Unattended execution is **local**: macOS `launchd` agents on the machine that owns the `.env` run the daily/weekly jobs (Dagster Cloud was retired for cost) — see [docs/local-scheduling.md](docs/local-scheduling.md).
 
 ---
 
@@ -95,6 +95,23 @@ uv run dagster dev
 ```
 
 Access the Dagster UI at http://localhost:3000 to materialize assets.
+
+### Scheduled (unattended) runs
+
+Daily ingestion + dbt + dashboard build, and the weekly correlation analysis,
+run locally via macOS `launchd` agents — there is no hosted scheduler. The
+agents invoke `scripts/run_scheduled.py <job>` against yesterday's partition
+and log to `logs/`. Install, schedule times, health checks, and the
+missed-run catch-up runbook are in
+[docs/local-scheduling.md](docs/local-scheduling.md).
+
+```bash
+# Health check: second column is the last exit code (0 = healthy)
+launchctl list | grep waga
+
+# Run a job manually (targets yesterday's partition)
+uv run python scripts/run_scheduled.py daily
+```
 
 ### Run dbt
 
@@ -170,7 +187,7 @@ generation/capacity-factor columns.
 ```
 Weather_Adjusted_Generation_Analytics/
 ├── src/weather_analytics/          # Dagster pipeline package
-│   ├── definitions.py              # Dagster Cloud entry point
+│   ├── definitions.py              # Dagster entry point (dagster dev + scheduled CLI runs)
 │   ├── assets/
 │   │   ├── ingestion/              # dlt ingestion (weather, generation)
 │   │   ├── analytics/              # Polars correlation analysis
@@ -188,7 +205,10 @@ Weather_Adjusted_Generation_Analytics/
 │       ├── local_export.py         # Build dashboard JSON without Snowflake
 │       └── generate_*.py           # Legacy wind/solar generators (Snowflake path)
 │
-├── scripts/build_local_dashboard.py # Simulate -> export -> render the dashboard
+├── scripts/
+│   ├── build_local_dashboard.py    # Simulate -> export -> render the dashboard
+│   ├── run_scheduled.py            # Job runner the launchd agents invoke
+│   └── install_launchd.py          # Write/load the launchd agents (see docs/local-scheduling.md)
 │
 ├── dbt/renewable_dbt/              # dbt project (dbt-snowflake)
 │   ├── models/
@@ -200,7 +220,7 @@ Weather_Adjusted_Generation_Analytics/
 │   └── profiles/                   # Snowflake key-pair auth
 │
 ├── tests/                          # pytest unit tests
-├── dagster_cloud.yaml              # Dagster Cloud config
+├── docs/local-scheduling.md        # launchd scheduling: install, health checks, catch-up runbook
 ├── .env.example                    # Environment variable template
 └── pyproject.toml                  # Dependencies and tooling
 ```
