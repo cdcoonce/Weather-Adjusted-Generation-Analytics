@@ -48,6 +48,11 @@ WEATHER_COLUMNS: tuple[str, ...] = (
     "cloud_cover_pct",
 )
 
+# Shared base seed so every caller (real generators + tests) gets the same
+# per-day weather realization; see ``synthetic_weather``'s per-calendar-day
+# seeding scheme.
+DEFAULT_WEATHER_SEED = 42
+
 
 def _fetch_one(
     asset: FleetAsset, start_date: str, end_date: str, timeout: float
@@ -199,7 +204,7 @@ def synthetic_weather(
     assets: tuple[FleetAsset, ...] | list[FleetAsset],
     start_date: str,
     end_date: str,
-    random_seed: int = 42,
+    random_seed: int = DEFAULT_WEATHER_SEED,
 ) -> pl.DataFrame:
     """Latitude-aware synthetic hourly weather (offline fallback).
 
@@ -256,7 +261,7 @@ def get_weather(
     start_date: str,
     end_date: str,
     use_real: bool = True,
-    random_seed: int = 42,
+    random_seed: int = DEFAULT_WEATHER_SEED,
 ) -> tuple[pl.DataFrame, str]:
     """Return hourly weather and its provenance label.
 
@@ -277,6 +282,7 @@ def get_weather(
 
 
 __all__ = [
+    "DEFAULT_WEATHER_SEED",
     "WEATHER_COLUMNS",
     "fetch_open_meteo",
     "get_weather",

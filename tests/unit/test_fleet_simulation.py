@@ -12,6 +12,7 @@ import pytest
 
 from weather_analytics.mock_data.fleet import FLEET
 from weather_analytics.mock_data.generate_generation import generate_generation_data
+from weather_analytics.mock_data.generate_weather import generate_weather_data
 from weather_analytics.mock_data.local_export import (
     SCHEMA_VERSION,
     build_bundle,
@@ -223,3 +224,17 @@ def test_generate_generation_data_warmup_is_idempotent_and_bounded() -> None:
     assert a.equals(b)
     assert a["timestamp"].min() == datetime(2023, 6, 15, 0)
     assert a["timestamp"].max() == datetime(2023, 6, 15, 23)
+
+
+def test_raw_weather_matches_generation_driving_weather() -> None:
+    """The weather ingestion asset's frame equals the weather that drove the
+    generation simulation — the invariant the marts' join relies on."""
+    raw = generate_weather_data("2023-06-15T00:00:00", "2023-06-15T23:00:00")
+    sim = simulate_fleet(
+        "2023-06-15T00:00:00",
+        "2023-06-15T23:00:00",
+        FLEET,
+        use_real_weather=False,
+        random_seed=123,
+    )
+    assert raw.equals(sim.weather.select(raw.columns))

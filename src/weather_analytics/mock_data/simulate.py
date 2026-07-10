@@ -29,7 +29,10 @@ from weather_analytics.mock_data.fleet import (
     WIND,
     FleetAsset,
 )
-from weather_analytics.mock_data.weather_sources import get_weather
+from weather_analytics.mock_data.weather_sources import (
+    DEFAULT_WEATHER_SEED,
+    get_weather,
+)
 
 # Core + technology-specific columns emitted by the simulation.
 GENERATION_COLUMNS: tuple[str, ...] = (
@@ -133,7 +136,7 @@ def simulate_fleet(
     use_real_weather: bool = True,
     random_seed: int = 42,
     warmup_days: int = 0,
-    weather_seed: int = 42,
+    weather_seed: int = DEFAULT_WEATHER_SEED,
 ) -> SimulationResult:
     """Run the full hourly fleet simulation.
 
@@ -146,7 +149,8 @@ def simulate_fleet(
     use_real_weather : bool
         Attempt an Open-Meteo pull before falling back to synthetic weather.
     random_seed : int
-        Seed for all stochastic components.
+        Seed for the stochastic physics (turbulence, availability); weather is
+        seeded by ``weather_seed``.
     warmup_days : int
         Simulate this many extra days before ``start_date`` and discard them from
         the returned frames. Lets state-carrying assets (battery SOC) and the

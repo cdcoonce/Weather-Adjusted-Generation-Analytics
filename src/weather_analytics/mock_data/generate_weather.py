@@ -15,7 +15,10 @@ from pathlib import Path
 import polars as pl
 
 from weather_analytics.mock_data.fleet import FLEET
-from weather_analytics.mock_data.weather_sources import synthetic_weather
+from weather_analytics.mock_data.weather_sources import (
+    DEFAULT_WEATHER_SEED,
+    synthetic_weather,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -36,7 +39,7 @@ def generate_weather_data(
     start_date: str,
     end_date: str,
     asset_count: int | None = None,  # noqa: ARG001
-    random_seed: int = 42,
+    random_seed: int = DEFAULT_WEATHER_SEED,
 ) -> pl.DataFrame:
     """Generate realistic hourly weather for the full fleet.
 

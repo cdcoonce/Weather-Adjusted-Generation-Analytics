@@ -10,6 +10,9 @@ The Dagster ingestion asset merges these records into Snowflake RAW; dlt evolves
 the RAW schema to add the new columns. Weather here is synthetic and seeded per
 calendar day (shared ``weather_seed`` base), so ingestion is reproducible and
 consistent with the weather ingestion asset by construction.
+
+The live Open-Meteo pull is a local-dashboard feature (see
+``simulate_fleet(use_real_weather=True)``).
 """
 
 from __future__ import annotations
@@ -49,7 +52,8 @@ def generate_generation_data(
         Deprecated / ignored — the fleet is defined by ``fleet.FLEET``. Kept for
         backward compatibility with earlier callers.
     random_seed : int
-        Seed for the (synthetic) weather and all stochastic physics.
+        Seed for the stochastic physics; synthetic weather is seeded
+        separately (see ``weather_seed`` on :func:`simulate_fleet`).
     warmup_days : int
         Number of days to simulate before ``start_date`` to warm up stateful
         models (e.g., battery SOC). Output is filtered to [start_date, end_date].
