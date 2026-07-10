@@ -261,12 +261,18 @@ def get_weather(
     start_date: str,
     end_date: str,
     use_real: bool = True,
-    random_seed: int = DEFAULT_WEATHER_SEED,
+    weather_seed: int = DEFAULT_WEATHER_SEED,
 ) -> tuple[pl.DataFrame, str]:
     """Return hourly weather and its provenance label.
 
     Tries Open-Meteo when ``use_real`` is set, falling back to synthetic weather
     on any failure so the caller always gets a usable frame.
+
+    Parameters
+    ----------
+    weather_seed : int
+        Per-day base seed forwarded to :func:`synthetic_weather` when the
+        synthetic fallback is used.
 
     Returns
     -------
@@ -278,7 +284,7 @@ def get_weather(
         real = fetch_open_meteo(assets, start_date, end_date)
         if real is not None and real.height > 0:
             return real, "open-meteo"
-    return synthetic_weather(assets, start_date, end_date, random_seed), "synthetic"
+    return synthetic_weather(assets, start_date, end_date, weather_seed), "synthetic"
 
 
 __all__ = [

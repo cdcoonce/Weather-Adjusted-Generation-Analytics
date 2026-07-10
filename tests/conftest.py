@@ -3,9 +3,41 @@
 from __future__ import annotations
 
 from pathlib import Path
+from types import SimpleNamespace
+from unittest.mock import MagicMock
 
 import polars as pl
 import pytest
+
+
+@pytest.fixture
+def make_fake_dlt():
+    """Factory for the fake dlt resource/pipeline pair the ingestion assets use.
+
+    Returns (resource, pipeline); customize the load id, failure flag, or
+    schema_update the fake load_info reports.
+    """
+    def _make(
+        load_id: str = "load_123",
+        has_failed_jobs: bool = False,
+        schema_update: dict | None = None,
+    ):
+        load_info = SimpleNamespace(
+            loads_ids=[load_id],
+            has_failed_jobs=has_failed_jobs,
+            load_packages=[
+                SimpleNamespace(
+                    schema_update=schema_update or {},
+                    jobs={"completed_jobs": []},
+                )
+            ],
+        )
+        pipeline = MagicMock()
+        pipeline.run.return_value = load_info
+        resource = MagicMock()
+        resource.create_pipeline.return_value = pipeline
+        return resource, pipeline
+    return _make
 
 
 @pytest.fixture
