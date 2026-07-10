@@ -101,10 +101,13 @@ Access the Dagster UI at http://localhost:3000 to materialize assets.
 Daily ingestion + dbt + dashboard build **and Cloudflare Pages deploy**, and
 the weekly correlation analysis, run locally via macOS `launchd` agents —
 there is no hosted scheduler. The agents invoke `scripts/run_scheduled.py
-<job>` against yesterday's partition and log to `logs/`; the runner waits for
-the network at wake, `uv sync`s the environment up front, and retries each
-step once. Install, schedule times, health checks, and the missed-run
-catch-up runbook are in [docs/local-scheduling.md](docs/local-scheduling.md).
+<job>` against yesterday's partition and log to `logs/`; the runner holds a
+`caffeinate` wake assertion (so the machine can't re-sleep mid-run), waits
+for the network at wake, `uv sync`s the environment up front, retries each
+step once, and reports the outcome (macOS notification on failure + optional
+healthchecks-style ping via `WAGA_HEALTHCHECK_URL`). Install, schedule times,
+health checks, and the missed-run catch-up runbook are in
+[docs/local-scheduling.md](docs/local-scheduling.md).
 
 ```bash
 # Health check: second column is the last exit code (0 = healthy)

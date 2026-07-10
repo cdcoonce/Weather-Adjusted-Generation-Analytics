@@ -26,6 +26,7 @@ import shutil
 import socket
 import subprocess
 import time
+import urllib.request
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
@@ -224,6 +225,70 @@ def run_step_with_retries(  # noqa: PLR0913 - injectable runner/sleep for tests
     return returncode
 
 
+def hold_wake_assertion(
+    pid: int,
+    emit: Callable[[str], None] = print,
+    popen: Callable[..., object] = subprocess.Popen,
+) -> object | None:
+    """Keep the machine awake while ``pid`` is alive (caffeinate sidecar).
+
+    launchd fires the 06:00 job during a DarkWake window; without a power
+    assertion the machine goes back to sleep ~3 minutes later and the run is
+    suspended, resuming in ~3-minute slices every ~16 minutes (observed
+    2026-07-09: a ~10-minute chain took 3.5 h wall-clock). ``caffeinate -w``
+    holds the assertion until this process exits, then releases it — no
+    cleanup needed. ``-i`` prevents idle sleep; ``-s`` additionally holds the
+    system awake on AC power.
+
+    Returns the sidecar process, or None when caffeinate can't be spawned
+    (non-macOS or stripped environment) — the run proceeds without it.
+    """
+    try:
+        return popen(["/usr/bin/caffeinate", "-i", "-s", "-w", str(pid)])
+    except OSError as exc:
+        emit(f"caffeinate unavailable ({exc}); continuing without wake assertion")
+        return None
+
+
+def report_outcome(  # noqa: PLR0913 - injectable runner/urlopen for tests
+    job: str,
+    returncode: int,
+    log_path: Path,
+    emit: Callable[[str], None] = print,
+    runner: Callable[..., object] = subprocess.run,
+    urlopen: Callable[..., object] = urllib.request.urlopen,
+) -> None:
+    """Signal the run's outcome beyond the log file — nothing else alerts.
+
+    - On failure, post a macOS notification (visible at next login/glance).
+    - When ``WAGA_HEALTHCHECK_URL`` is set (via .env or the environment),
+      ping it healthchecks-style: GET <url> on success, GET <url>/fail on
+      failure. Because a machine that never ran pings nothing, a missing
+      success ping is itself the alert — a dead-man's switch that also
+      catches launchd never firing at all.
+
+    Never raises, and never alters the run's exit code.
+    """
+    if returncode != 0:
+        message = f"{job} run failed (exit {returncode}) - see {log_path.name}"
+        script = 'display notification "{}" with title "WAGA scheduled run"'.format(
+            message.replace('"', "'")
+        )
+        try:
+            runner(["/usr/bin/osascript", "-e", script], check=False)
+        except OSError as exc:
+            emit(f"notification failed: {exc}")
+
+    url = os.environ.get("WAGA_HEALTHCHECK_URL", "").strip()
+    if not url:
+        return
+    target = url if returncode == 0 else url.rstrip("/") + "/fail"
+    try:
+        urlopen(target, timeout=10)
+    except OSError as exc:
+        emit(f"healthcheck ping failed: {exc}")
+
+
 def main() -> int:
     """Run the requested job's step chain, logging to file and stdout."""
     parser = argparse.ArgumentParser(
@@ -258,68 +323,82 @@ def main() -> int:
             log.write(message + "\n")
             log.flush()
 
+        hold_wake_assertion(os.getpid(), emit=emit)
+
         emit(f"=== scheduled run: job={args.job} partition={_YESTERDAY} ===")
         emit(f"repo={REPO}")
         emit(f"uv={UV}")
         emit(f"dagster_home={os.environ['DAGSTER_HOME']}")
 
-        emit("--- preflight: wait for network (DNS) ---")
-        wait_for_network(emit=emit)
+        code = _run_chain(args.job, steps, log, emit)
+        report_outcome(args.job, code, log_path, emit=emit)
+        return code
 
-        # Materialize the locked environment up front, while the network (if
-        # needed) is known-good, so the ``uv run`` steps below never touch
-        # PyPI mid-chain. After a merge changes the tree, ``uv run`` rebuilds
-        # the project and needs hatchling — this is where that now happens,
-        # with retries instead of a silent skipped partition.
-        # ``--inexact`` matters: a plain (exact) sync REMOVES packages outside
-        # the default lockfile set, which strips the dev extras (ruff, mypy,
-        # jupyter) from the shared venv on every scheduled run.
-        sync_cmd = [UV, "sync", "--inexact"]
-        emit(f"--- pre-step: {' '.join(sync_cmd)} ---")
-        sync_code = run_step_with_retries(
-            sync_cmd,
-            label="pre-step uv sync",
+
+def _run_chain(
+    job: str,
+    steps: list[list[str]],
+    log: TextIO,
+    emit: Callable[[str], None],
+) -> int:
+    """Run the preflight, pre-step, steps, and post-steps; return exit code."""
+    emit("--- preflight: wait for network (DNS) ---")
+    wait_for_network(emit=emit)
+
+    # Materialize the locked environment up front, while the network (if
+    # needed) is known-good, so the ``uv run`` steps below never touch
+    # PyPI mid-chain. After a merge changes the tree, ``uv run`` rebuilds
+    # the project and needs hatchling — this is where that now happens,
+    # with retries instead of a silent skipped partition.
+    # ``--inexact`` matters: a plain (exact) sync REMOVES packages outside
+    # the default lockfile set, which strips the dev extras (ruff, mypy,
+    # jupyter) from the shared venv on every scheduled run.
+    sync_cmd = [UV, "sync", "--inexact"]
+    emit(f"--- pre-step: {' '.join(sync_cmd)} ---")
+    sync_code = run_step_with_retries(
+        sync_cmd,
+        label="pre-step uv sync",
+        emit=emit,
+        log_file=log,
+        attempts=3,
+        retry_delay_s=30.0,
+    )
+    if sync_code != 0:
+        emit(f"PRE-STEP FAILED (exit {sync_code}): uv sync")
+        return sync_code
+
+    for index, step in enumerate(steps, start=1):
+        # Invoke via ``python -m dagster`` (not the ``dagster`` console
+        # script) so a stale entry-point shebang from a relocated/rebuilt
+        # venv can't break the unattended run.
+        cmd = [UV, "run", "python", "-m", "dagster", *step]
+        emit(f"--- step {index}/{len(steps)}: {' '.join(cmd)} ---")
+        code = run_step_with_retries(
+            cmd,
+            label=f"step {index}/{len(steps)}",
             emit=emit,
             log_file=log,
-            attempts=3,
-            retry_delay_s=30.0,
         )
-        if sync_code != 0:
-            emit(f"PRE-STEP FAILED (exit {sync_code}): uv sync")
-            return sync_code
+        if code != 0:
+            emit(f"FAILED (exit {code}) on step {index}")
+            return code
 
-        for index, step in enumerate(steps, start=1):
-            # Invoke via ``python -m dagster`` (not the ``dagster`` console
-            # script) so a stale entry-point shebang from a relocated/rebuilt
-            # venv can't break the unattended run.
-            cmd = [UV, "run", "python", "-m", "dagster", *step]
-            emit(f"--- step {index}/{len(steps)}: {' '.join(cmd)} ---")
-            code = run_step_with_retries(
-                cmd,
-                label=f"step {index}/{len(steps)}",
-                emit=emit,
-                log_file=log,
-            )
-            if code != 0:
-                emit(f"FAILED (exit {code}) on step {index}")
-                return code
+    emit("=== all steps succeeded ===")
 
-        emit("=== all steps succeeded ===")
-
-        post_steps = POST_STEPS.get(args.job, [])
-        for index, cmd in enumerate(post_steps, start=1):
-            emit(f"--- post-step {index}/{len(post_steps)}: {' '.join(cmd)} ---")
-            code = run_step_with_retries(
-                cmd,
-                label=f"post-step {index}/{len(post_steps)}",
-                emit=emit,
-                log_file=log,
-            )
-            if code != 0:
-                emit(f"POST-STEP FAILED (exit {code}) on step {index}")
-                return code
-        emit("=== all post-steps succeeded ===")
-        return 0
+    post_steps = POST_STEPS.get(job, [])
+    for index, cmd in enumerate(post_steps, start=1):
+        emit(f"--- post-step {index}/{len(post_steps)}: {' '.join(cmd)} ---")
+        code = run_step_with_retries(
+            cmd,
+            label=f"post-step {index}/{len(post_steps)}",
+            emit=emit,
+            log_file=log,
+        )
+        if code != 0:
+            emit(f"POST-STEP FAILED (exit {code}) on step {index}")
+            return code
+    emit("=== all post-steps succeeded ===")
+    return 0
 
 
 if __name__ == "__main__":

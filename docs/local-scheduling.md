@@ -31,11 +31,17 @@ network-at-wake failure mode ("fixed failure mode 1" in the troubleshooting
 section — the npx PATH failure, "fixed failure mode 2", is fixed in the
 *plist* by the installer, not in the runner, and needs the agents reinstalled):
 
-1. **Network preflight** — waits up to 5 minutes for DNS to resolve
+1. **Wake assertion** — spawns a `caffeinate -i -s -w <pid>` sidecar so the
+   machine stays awake for the whole run. Without it, a DarkWake-fired job is
+   suspended when the machine re-sleeps ~3 minutes later and resumes in
+   ~3-minute slices every ~16 minutes — a ~10-minute chain was taking
+   **3.5 hours** of wall-clock (observed 2026-07-09). The sidecar exits with
+   the runner, releasing the assertion.
+2. **Network preflight** — waits up to 5 minutes for DNS to resolve
    (`pypi.org`), probing every 15 s. launchd fires a missed job immediately on
    wake, which can be before the network is up. A timeout does **not** abort
    the run (an unchanged tree needs no network); it just logs and proceeds.
-2. **`uv sync --inexact` pre-step** — materializes the locked environment up
+3. **`uv sync --inexact` pre-step** — materializes the locked environment up
    front (3 attempts, 30 s apart), so the `uv run` steps never touch PyPI
    mid-chain. A final failure aborts the chain (`PRE-STEP FAILED`).
    `--inexact` because an exact sync would *remove* the dev extras (ruff,
@@ -108,9 +114,23 @@ from `~/Library/LaunchAgents`.
 
 The `logs/` directory is gitignored, so nothing here is committed.
 
+## Alerting
+
+The runner reports every run's outcome beyond the log file:
+
+- **On failure**, it posts a macOS notification (`osascript`) — visible the
+  next time you look at the machine.
+- **Dead-man's switch (optional):** set `WAGA_HEALTHCHECK_URL` in `.env` to a
+  [healthchecks.io](https://healthchecks.io)-style check URL. Every run pings
+  it — `GET <url>` on success, `GET <url>/fail` on failure. Because a machine
+  that never ran pings *nothing*, a missed ping is itself the alert: this
+  catches launchd never firing (asleep all day, unloaded agent) — the one
+  failure class no local signal can. Create a check with a ~26 h grace period
+  and paste its URL into `.env`; until then the ping is a silent no-op.
+
 ## Health check & troubleshooting
 
-Nothing alerts on a failed run — the only signals are local. Check health with:
+Local signals to check by hand:
 
 ```sh
 # Second column is the LAST EXIT CODE per agent: 0 = healthy, 1 = last run failed
