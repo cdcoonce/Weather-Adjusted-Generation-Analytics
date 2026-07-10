@@ -246,8 +246,11 @@ def test_warmup_seven_days_washes_out_battery_initial_condition() -> None:
     forget the 50% window-start SOC (spec, Testing item 2).
 
     Uses a battery-only fleet: with no wind/solar/gas the dispatch signal is
-    pure trig of timestamps, so any day-D difference is initial-condition
-    memory, not physics noise.
+    pure trig of timestamps, so no physics noise reaches the battery path.
+    Residual day-D differences can come from initial-condition memory OR from
+    the rank-signal denominator (``_rank_signal`` normalizes over the full
+    window, so 7d vs 8d shifts every hour's percentile slightly) — on a
+    failure, check both before blaming SOC convergence.
     """
     batteries = tuple(a for a in FLEET if a.asset_type == "battery")
     assert batteries, "fleet must contain at least one battery"
