@@ -15,6 +15,7 @@ technology-specific columns (battery SOC/throughput, gas fuel/heat-rate/CO2).
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timedelta
 
 import numpy as np
 import polars as pl
@@ -131,6 +132,8 @@ def simulate_fleet(
     assets: tuple[FleetAsset, ...] = FLEET,
     use_real_weather: bool = True,
     random_seed: int = 42,
+    warmup_days: int = 0,
+    weather_seed: int = 42,
 ) -> SimulationResult:
     """Run the full hourly fleet simulation.
 
@@ -144,15 +147,26 @@ def simulate_fleet(
         Attempt an Open-Meteo pull before falling back to synthetic weather.
     random_seed : int
         Seed for all stochastic components.
+    warmup_days : int
+        Simulate this many extra days before ``start_date`` and discard them from
+        the returned frames. Lets state-carrying assets (battery SOC) and the
+        dispatch rank signal reach a realistic trajectory before the target window.
+    weather_seed : int
+        Base seed for synthetic weather. Kept separate from ``random_seed`` so
+        every caller shares one weather realization per calendar day regardless
+        of their physics seed.
 
     Returns
     -------
     SimulationResult
         Generation frame, weather frame, and weather provenance.
     """
+    start_dt = datetime.fromisoformat(start_date)
+    sim_start = (start_dt - timedelta(days=warmup_days)).isoformat()
+
     rng = np.random.default_rng(random_seed)
     weather, source = get_weather(
-        assets, start_date, end_date, use_real_weather, random_seed
+        assets, sim_start, end_date, use_real_weather, weather_seed
     )
 
     timestamps = weather.select("timestamp").unique().sort("timestamp")["timestamp"]
@@ -271,6 +285,9 @@ def simulate_fleet(
     generation = (
         pl.concat(rows).select(GENERATION_COLUMNS).sort(["timestamp", "asset_id"])
     )
+    if warmup_days > 0:
+        generation = generation.filter(pl.col("timestamp") >= start_dt)
+        weather = weather.filter(pl.col("timestamp") >= start_dt)
     return SimulationResult(generation, weather, source)
 
 
