@@ -23,9 +23,13 @@ import argparse
 import datetime
 import os
 import shutil
+import socket
 import subprocess
+import time
+from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
+from typing import TextIO
 
 REPO = Path(__file__).resolve().parent.parent
 MODULE = "weather_analytics.definitions"
@@ -135,6 +139,91 @@ POST_STEPS: dict[str, list[list[str]]] = {
 }
 
 
+def wait_for_network(  # noqa: PLR0913 - injectable probe/clock for tests
+    host: str = "pypi.org",
+    port: int = 443,
+    timeout_s: float = 300.0,
+    interval_s: float = 15.0,
+    probe: Callable[[str, int], object] = socket.getaddrinfo,
+    sleep: Callable[[float], None] = time.sleep,
+    monotonic: Callable[[], float] = time.monotonic,
+    emit: Callable[[str], None] = print,
+) -> bool:
+    """Wait until DNS resolves ``host``, up to ``timeout_s`` seconds.
+
+    launchd fires a missed calendar job immediately on wake, which can be
+    before the network/DNS is up (observed 2026-07-10: `uv run` needed PyPI to
+    rebuild the project after a merge and aborted the chain on a DNS error).
+    Probing DNS instead of opening a connection keeps this fast and free of
+    remote side effects.
+
+    Returns True once the probe succeeds, False on timeout. A False return
+    does NOT abort the run — with an unchanged tree the chain works offline,
+    and steps that do need the network fail loudly and get retried.
+    """
+    deadline = monotonic() + timeout_s
+    attempt = 1
+    while True:
+        try:
+            probe(host, port)
+        except OSError as exc:
+            remaining = deadline - monotonic()
+            if remaining <= 0:
+                emit(
+                    f"network: {host} still unresolvable after {timeout_s:.0f}s "
+                    "- proceeding anyway (offline runs work when the tree is "
+                    "unchanged)"
+                )
+                return False
+            emit(
+                f"network: attempt {attempt} failed ({exc}); "
+                f"retrying in {interval_s:.0f}s"
+            )
+            sleep(min(interval_s, remaining))
+            attempt += 1
+        else:
+            if attempt > 1:
+                emit(f"network: reachable after {attempt} attempts")
+            return True
+
+
+def run_step_with_retries(  # noqa: PLR0913 - injectable runner/sleep for tests
+    cmd: list[str],
+    *,
+    label: str,
+    emit: Callable[[str], None],
+    log_file: TextIO,
+    attempts: int = 2,
+    retry_delay_s: float = 60.0,
+    runner: Callable[..., subprocess.CompletedProcess] = subprocess.run,
+    sleep: Callable[[float], None] = time.sleep,
+) -> int:
+    """Run ``cmd``, retrying up to ``attempts`` total tries on non-zero exit.
+
+    Safe because every step in the chain is idempotent: dlt merges on
+    ``(asset_id, timestamp)``, dbt builds are re-runnable, and the cockpit
+    build/deploy just re-renders and re-uploads. Covers transient failures
+    (Snowflake blips, network hiccups) that would otherwise silently skip a
+    partition — nothing alerts on a failed unattended run.
+
+    Returns the last exit code (0 on success).
+    """
+    returncode = 1
+    for attempt in range(1, attempts + 1):
+        result = runner(cmd, cwd=REPO, stdout=log_file, stderr=subprocess.STDOUT)
+        log_file.flush()
+        returncode = result.returncode
+        if returncode == 0:
+            return 0
+        if attempt < attempts:
+            emit(
+                f"{label}: exit {returncode} (attempt {attempt}/{attempts}); "
+                f"retrying in {retry_delay_s:.0f}s"
+            )
+            sleep(retry_delay_s)
+    return returncode
+
+
 def main() -> int:
     """Run the requested job's step chain, logging to file and stdout."""
     parser = argparse.ArgumentParser(
@@ -174,35 +263,61 @@ def main() -> int:
         emit(f"uv={UV}")
         emit(f"dagster_home={os.environ['DAGSTER_HOME']}")
 
+        emit("--- preflight: wait for network (DNS) ---")
+        wait_for_network(emit=emit)
+
+        # Materialize the locked environment up front, while the network (if
+        # needed) is known-good, so the ``uv run`` steps below never touch
+        # PyPI mid-chain. After a merge changes the tree, ``uv run`` rebuilds
+        # the project and needs hatchling — this is where that now happens,
+        # with retries instead of a silent skipped partition.
+        # ``--inexact`` matters: a plain (exact) sync REMOVES packages outside
+        # the default lockfile set, which strips the dev extras (ruff, mypy,
+        # jupyter) from the shared venv on every scheduled run.
+        sync_cmd = [UV, "sync", "--inexact"]
+        emit(f"--- pre-step: {' '.join(sync_cmd)} ---")
+        sync_code = run_step_with_retries(
+            sync_cmd,
+            label="pre-step uv sync",
+            emit=emit,
+            log_file=log,
+            attempts=3,
+            retry_delay_s=30.0,
+        )
+        if sync_code != 0:
+            emit(f"PRE-STEP FAILED (exit {sync_code}): uv sync")
+            return sync_code
+
         for index, step in enumerate(steps, start=1):
             # Invoke via ``python -m dagster`` (not the ``dagster`` console
             # script) so a stale entry-point shebang from a relocated/rebuilt
             # venv can't break the unattended run.
             cmd = [UV, "run", "python", "-m", "dagster", *step]
             emit(f"--- step {index}/{len(steps)}: {' '.join(cmd)} ---")
-            result = subprocess.run(  # noqa: PLW1510 - returncode handled below
+            code = run_step_with_retries(
                 cmd,
-                cwd=REPO,
-                stdout=log,
-                stderr=subprocess.STDOUT,
+                label=f"step {index}/{len(steps)}",
+                emit=emit,
+                log_file=log,
             )
-            log.flush()
-            if result.returncode != 0:
-                emit(f"FAILED (exit {result.returncode}) on step {index}")
-                return result.returncode
+            if code != 0:
+                emit(f"FAILED (exit {code}) on step {index}")
+                return code
 
         emit("=== all steps succeeded ===")
 
         post_steps = POST_STEPS.get(args.job, [])
         for index, cmd in enumerate(post_steps, start=1):
             emit(f"--- post-step {index}/{len(post_steps)}: {' '.join(cmd)} ---")
-            result = subprocess.run(  # noqa: PLW1510 - returncode handled below
-                cmd, cwd=REPO, stdout=log, stderr=subprocess.STDOUT
+            code = run_step_with_retries(
+                cmd,
+                label=f"post-step {index}/{len(post_steps)}",
+                emit=emit,
+                log_file=log,
             )
-            log.flush()
-            if result.returncode != 0:
-                emit(f"POST-STEP FAILED (exit {result.returncode}) on step {index}")
-                return result.returncode
+            if code != 0:
+                emit(f"POST-STEP FAILED (exit {code}) on step {index}")
+                return code
         emit("=== all post-steps succeeded ===")
         return 0
 

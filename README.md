@@ -98,16 +98,20 @@ Access the Dagster UI at http://localhost:3000 to materialize assets.
 
 ### Scheduled (unattended) runs
 
-Daily ingestion + dbt + dashboard build, and the weekly correlation analysis,
-run locally via macOS `launchd` agents — there is no hosted scheduler. The
-agents invoke `scripts/run_scheduled.py <job>` against yesterday's partition
-and log to `logs/`. Install, schedule times, health checks, and the
-missed-run catch-up runbook are in
-[docs/local-scheduling.md](docs/local-scheduling.md).
+Daily ingestion + dbt + dashboard build **and Cloudflare Pages deploy**, and
+the weekly correlation analysis, run locally via macOS `launchd` agents —
+there is no hosted scheduler. The agents invoke `scripts/run_scheduled.py
+<job>` against yesterday's partition and log to `logs/`; the runner waits for
+the network at wake, `uv sync`s the environment up front, and retries each
+step once. Install, schedule times, health checks, and the missed-run
+catch-up runbook are in [docs/local-scheduling.md](docs/local-scheduling.md).
 
 ```bash
 # Health check: second column is the last exit code (0 = healthy)
 launchctl list | grep waga
+
+# The green signal: last line of the newest daily log
+tail -1 "$(ls -t logs/scheduled-daily-*.log | head -1)"
 
 # Run a job manually (targets yesterday's partition)
 uv run python scripts/run_scheduled.py daily

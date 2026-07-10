@@ -55,6 +55,27 @@ def _uv_dir() -> str:
     return str(Path.home() / ".local" / "bin")
 
 
+def _node_dir() -> str:
+    """Directory containing node/npx, for the agent's PATH.
+
+    The daily chain's cockpit deploy post-step shells out to ``npx`` (see
+    cockpit/cloudflare.py), which the previous minimal PATH could not resolve
+    — every unattended deploy failed with FileNotFoundError until 2026-07-10.
+    Falls back to the Homebrew bin dir on Apple silicon.
+    """
+    npx_path = shutil.which("npx")
+    if npx_path:
+        return str(Path(npx_path).parent)
+    fallback = "/opt/homebrew/bin"
+    print(
+        f"WARNING: npx not found on PATH; agent PATH falls back to {fallback}. "
+        "If node lives elsewhere (nvm/Volta/fnm), the cockpit deploy post-step "
+        "will still fail — re-run the installer from a shell where npx resolves.",
+        file=sys.stderr,
+    )
+    return fallback
+
+
 def _launch_python() -> str:
     """Stable interpreter for the launchd agent's ProgramArguments[0].
 
@@ -78,7 +99,18 @@ def _plist_path(job: str) -> Path:
 
 def build_plist(job: str, interval: dict[str, int]) -> dict[str, object]:
     """Build the plist dictionary for a single scheduled job."""
-    path_env = f"{_uv_dir()}:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin"
+    # uv first, node next (cockpit deploy needs npx), then the system dirs.
+    # Deduped in order so co-located binaries don't produce duplicate entries.
+    path_parts = [
+        _uv_dir(),
+        _node_dir(),
+        "/usr/local/bin",
+        "/usr/bin",
+        "/bin",
+        "/usr/sbin",
+        "/sbin",
+    ]
+    path_env = ":".join(dict.fromkeys(path_parts))
     label = _label(job)
     return {
         "Label": label,

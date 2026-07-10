@@ -26,13 +26,33 @@ the `JOBS` dict in that script.
 | `daily`  | 1. `--select waga_weather_ingestion,waga_generation_ingestion --partition <yday>`<br>2. `--select group:default`<br>3. `--select waga_dashboard_export_build` | The two ingestion assets (partitioned), then the dbt models (`group:default`: `stg_*`, `mart_*`, `metricflow_time_spine`), then the cockpit dashboard-export build |
 | `weekly` | 1. `--select waga_correlation_analysis`                                           | The correlation analysis asset                                |
 
-Steps run in order; a non-zero exit **aborts the rest of the chain** and is
-logged as `FAILED (exit N)`.
+Before the Dagster steps, the runner hardens itself against the
+network-at-wake failure mode ("fixed failure mode 1" in the troubleshooting
+section — the npx PATH failure, "fixed failure mode 2", is fixed in the
+*plist* by the installer, not in the runner, and needs the agents reinstalled):
 
-> **Deliberately excluded:** `waga_dashboard_export_publish` is **not**
-> scheduled here — publishing to Cloudflare Pages stays a manual
-> `cockpit deploy` decision. (The export **build** was wired into the daily
-> chain when the cockpit replaced the Pyodide dashboard.)
+1. **Network preflight** — waits up to 5 minutes for DNS to resolve
+   (`pypi.org`), probing every 15 s. launchd fires a missed job immediately on
+   wake, which can be before the network is up. A timeout does **not** abort
+   the run (an unchanged tree needs no network); it just logs and proceeds.
+2. **`uv sync --inexact` pre-step** — materializes the locked environment up
+   front (3 attempts, 30 s apart), so the `uv run` steps never touch PyPI
+   mid-chain. A final failure aborts the chain (`PRE-STEP FAILED`).
+   `--inexact` because an exact sync would *remove* the dev extras (ruff,
+   mypy, jupyter) from the shared venv on every scheduled run.
+
+Steps then run in order, each with **one retry after 60 s** on non-zero exit
+(safe: dlt merges are idempotent, dbt builds are re-runnable, the cockpit
+build/deploy just re-renders and re-uploads). A step that fails both attempts
+**aborts the rest of the chain** and is logged as `FAILED (exit N)`.
+
+After the Dagster steps, the `daily` job runs two **post-steps** (the
+`POST_STEPS` dict, same retry policy): `cockpit build` renders the static
+dashboard from the fresh JSON exports, and `cockpit deploy` publishes it to
+Cloudflare Pages via `npx wrangler`. Unattended deploys are intentional — the
+portfolio dashboard tracks the warehouse daily. (The old
+`waga_dashboard_export_publish` asset, which pushed to a stale portfolio
+branch, was removed when the cockpit replaced the Pyodide dashboard.)
 
 ## Schedule (local time)
 
@@ -96,26 +116,52 @@ Nothing alerts on a failed run — the only signals are local. Check health with
 # Second column is the LAST EXIT CODE per agent: 0 = healthy, 1 = last run failed
 launchctl list | grep waga
 
-# A healthy daily log is ~40 KB; a failed one is typically ~1 KB
-ls -la logs/scheduled-daily-*.log | tail -5
+# The only reliable green signal is the last line of the newest log:
+tail -1 "$(ls -t logs/scheduled-daily-*.log | head -1)"
+# healthy => "=== all post-steps succeeded ==="
 ```
 
-### Known failure mode: no network at wake (observed 2026-07-10)
+> **Do not judge health by log size.** Before 2026-07-10 every ~43 KB daily
+> log *looked* healthy but had failed at post-step 2 (`cockpit deploy`,
+> `FileNotFoundError: 'npx'`) — the Dagster steps' output dominates the file
+> either way. Check the tail, not the size.
+
+### Fixed failure mode 1: no network at wake (observed 2026-07-10)
 
 `launchd` fires the job at 06:00 local — or immediately on wake if the machine
 was asleep — which can be **before the network/DNS is up**. If the source tree
 changed since the last run (e.g. PRs merged the day before), `uv run` rebuilds
-the project and needs PyPI (`hatchling`); with no DNS the build fails and
-step 1 aborts the whole chain:
+the project and needs PyPI (`hatchling`); with no DNS the build fails:
 
 ```
 ├─▶ Failed to fetch: `https://pypi.org/simple/hatchling/`
 ╰─▶ failed to lookup address information: nodename nor servname provided
 ```
 
-The partition for that day is then silently skipped (exit code 1 in
-`launchctl list`, tiny log file). If the tree did NOT change, `uv run` needs no
-network and the run is immune.
+Before hardening, step 1 aborted the whole chain and the partition was
+silently skipped (exit code 1 in `launchctl list`, tiny log file).
+**Fixed 2026-07-10** by the network preflight + retryable `uv sync` pre-step
+described above. Remaining (unimplemented) fallback if it ever recurs anyway:
+a later `StartCalendarInterval` (e.g. 07:00) to widen the wake-to-network gap.
+
+### Fixed failure mode 2: `npx` not on the agent PATH (every run before 2026-07-10)
+
+The `cockpit deploy` post-step shells out to `npx wrangler`, but the agents'
+minimal `PATH` did not include the node bin dir (`/opt/homebrew/bin`), so
+**every unattended deploy failed** with `FileNotFoundError: 'npx'` while the
+Dagster steps succeeded — partitions landed, the published dashboard went
+stale, and the exit code was 1 either way. **Fixed 2026-07-10:**
+`install_launchd.py` now resolves `npx` at install time and adds its directory
+to the agent PATH (with an install-time warning if `npx` doesn't resolve —
+the `/opt/homebrew/bin` fallback is only right for Homebrew-managed node).
+This lives in the **plist**, so after pulling the fix you must rewrite +
+reload the agents:
+
+```sh
+# reloading UNLOADS each agent first, which kills an in-flight run mid-chain —
+# make sure nothing is running (daily runs can take ~2 h from 06:00):
+pgrep -fl run_scheduled.py || uv run python scripts/install_launchd.py install --load
+```
 
 ### Catch-up runbook (missed partition)
 
@@ -139,14 +185,6 @@ uv run dagster asset materialize -m weather_analytics.definitions --select group
 
 Find gaps by comparing `logs/scheduled-daily-*.log` dates, or directly in the
 warehouse: `select distinct timestamp::date from WAGA.raw.generation order by 1`.
-
-### Hardening candidates (not implemented)
-
-- Retry with backoff inside `run_scheduled.py` (a 5-minute retry would have
-  covered the observed DNS-at-wake failure).
-- A later `StartCalendarInterval` (e.g. 07:00) to widen the wake-to-network gap.
-- `uv sync` as a separate, retryable pre-step so the materialize steps
-  themselves never need the network.
 
 ## dbt manifest (first-run note)
 
