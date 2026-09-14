@@ -8,6 +8,16 @@ sources:
     tables:
       - name: weather
         description: "Hourly weather observations for renewable energy assets"
+        # dagster-dbt lineage: ties this source to the upstream Dagster asset
+        # that loads it, so staging models built on this source show
+        # waga_weather_ingestion as an upstream dependency in the asset
+        # graph. Lives under `config:` (not top-level `meta:`) per dbt 1.10's
+        # source config relocation; dagster-dbt 0.28.19's default_asset_key_fn
+        # checks `config.meta` before falling back to top-level `meta`.
+        config:
+          meta:
+            dagster:
+              asset_key: ["waga_weather_ingestion"]
         columns:
           - name: timestamp
             description: "Observation timestamp (UTC)"
