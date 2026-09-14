@@ -28,7 +28,7 @@ Parquet / API sources
 5. **Analytics** -- Polars correlation analysis writes to `WAGA.ANALYTICS`
 6. **Semantic layer** -- dbt metrics (`daily_generation`, `generation_efficiency`) for downstream BI
 
-All orchestrated by Dagster with asset checks (freshness, row count, value range). Unattended execution is **local**: macOS `launchd` agents on the machine that owns the `.env` run the daily/weekly jobs (Dagster Cloud was retired for cost) — see [docs/local-scheduling.md](docs/local-scheduling.md).
+All orchestrated by Dagster with asset checks (freshness, row count, value range). Unattended execution runs on a Dagster OSS webserver/daemon on a Linux home server, with this repo shipped as a Docker gRPC code-location image (`Dockerfile`) launched per-run via `DockerRunLauncher` — see [docs/local-scheduling.md](docs/local-scheduling.md). macOS `launchd` (the previous approach, after Dagster Cloud was retired for cost) remains a manual fallback only; it must not run at the same time as the server's schedules.
 
 ---
 
@@ -98,15 +98,24 @@ Access the Dagster UI at http://localhost:3000 to materialize assets.
 
 ### Scheduled (unattended) runs
 
-Daily ingestion + dbt + dashboard build **and Cloudflare Pages deploy**, and
-the weekly correlation analysis, run locally via macOS `launchd` agents —
-there is no hosted scheduler. The agents invoke `scripts/run_scheduled.py
-<job>` against yesterday's partition and log to `logs/`; the runner holds a
-`caffeinate` wake assertion (so the machine can't re-sleep mid-run), waits
-for the network at wake, `uv sync`s the environment up front, retries each
-step once, and reports the outcome (macOS notification on failure + optional
-healthchecks-style ping via `WAGA_HEALTHCHECK_URL`). Install, schedule times,
-health checks, and the missed-run catch-up runbook are in
+Primary path: the home server's Dagster OSS webserver/daemon runs this repo
+as a Docker gRPC code location (`Dockerfile`, `DockerRunLauncher` — every run
+is a fresh container). Two Dagster schedules (both `America/Phoenix`,
+default **stopped** until started at cutover):
+
+- `waga_daily_job_schedule` — 06:00 daily: ingestion -> dbt -> dashboard
+  export -> dashboard publish (Cloudflare Pages), as one job.
+- `waga_weekly_job_schedule` — 06:30 Monday: the correlation analysis.
+
+Fallback path (manual only — **must not run while the server's schedules are
+active**, both write to the same Snowflake partitions): macOS `launchd`
+agents invoke `scripts/run_scheduled.py <job>` against yesterday's partition
+and log to `logs/`; the runner holds a `caffeinate` wake assertion (so the
+machine can't re-sleep mid-run), waits for the network at wake, `uv sync`s
+the environment up front, retries each step once, and reports the outcome
+(macOS notification on failure + optional healthchecks-style ping via
+`WAGA_HEALTHCHECK_URL`). Install, schedule times, health checks, and the
+missed-run catch-up runbook are in
 [docs/local-scheduling.md](docs/local-scheduling.md).
 
 ```bash
@@ -194,14 +203,14 @@ generation/capacity-factor columns.
 ```
 Weather_Adjusted_Generation_Analytics/
 ├── src/weather_analytics/          # Dagster pipeline package
-│   ├── definitions.py              # Dagster entry point (dagster dev + scheduled CLI runs)
+│   ├── definitions.py              # Dagster entry point (dagster dev, gRPC code location, launchd fallback)
 │   ├── assets/
 │   │   ├── ingestion/              # dlt ingestion (weather, generation)
 │   │   ├── analytics/              # Polars correlation analysis
 │   │   └── dbt_assets.py           # @dbt_assets wrapper
 │   ├── resources/                  # WAGASnowflakeResource, DltIngestionResource
 │   ├── checks/                     # Asset checks (freshness, row count, range)
-│   ├── schedules.py                # Daily/weekly schedules
+│   ├── schedules.py                # waga_daily_job / waga_weekly_job + their schedules
 │   ├── lib/                        # polars_utils, config, logging
 │   ├── cockpit/                    # Self-contained static dashboard (build/serve/deploy)
 │   └── mock_data/                  # Fleet simulation + data generators

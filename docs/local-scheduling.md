@@ -1,25 +1,45 @@
-# Local Scheduling (launchd)
+# Local Scheduling (launchd) — manual fallback
 
-## Why
+## Status: fallback only
+
+Unattended execution now runs on a **Dagster OSS webserver/daemon on the
+rammingspeed home server**, with this repo shipped as a Docker gRPC code
+location (`Dockerfile`, `DockerRunLauncher`). Two Dagster schedules in
+`src/weather_analytics/schedules.py`, both `America/Phoenix`:
+
+- `waga_daily_job_schedule` — 06:00 daily (ingestion -> dbt -> dashboard
+  export -> dashboard publish, one job).
+- `waga_weekly_job_schedule` — 06:30 Monday (correlation analysis).
+
+Both ship `default_status=DefaultScheduleStatus.STOPPED` and are started on
+the server once the image is verified there — at that point they, not
+launchd, own unattended execution.
+
+Everything below this point documents the macOS **`launchd`** harness that
+predates the server and now serves only as a **manual fallback** (e.g. the
+server is down, or a one-off catch-up run is needed). **Do not run it while
+the server's schedules are active** — both write to the same Snowflake
+partitions and would race.
+
+## Why (history)
 
 Dagster Cloud (`dagster.plus`) was **retired** for this project, and with it the
-hosted schedules that used to materialize the pipeline every day. The schedules
-defined in `src/weather_analytics/schedules.py` still exist for use with the
-local Dagster UI, but nothing runs them unattended anymore.
-
-This directory's harness replaces those hosted schedules with macOS
-**`launchd`** agents that invoke the pipeline locally on a calendar interval —
-no external control plane, no API token, just a couple of user-level launch
-agents on the machine that owns the `.env`.
+hosted schedules that used to materialize the pipeline every day. Before the
+home server existed, this directory's harness replaced those hosted schedules
+with macOS **`launchd`** agents that invoke the pipeline locally on a calendar
+interval — no external control plane, no API token, just a couple of
+user-level launch agents on the machine that owns the `.env`.
 
 ## What launchd runs
 
 Each launchd agent runs `scripts/run_scheduled.py <job>`, which chains one or
 more `uv run python -m dagster asset materialize` steps against **yesterday's**
-partition — computed in Python (UTC, to match the assets' partition timezone),
-not the BSD `date` binary, and invoked via the `python -m` module form so a
-stale venv entry-point can't break unattended runs. The job definitions live in
-the `JOBS` dict in that script.
+partition — computed in Python (`America/Phoenix`, matching the ingestion
+assets' shared `INGESTION_PARTITIONS` timezone and the server schedules'
+06:00-Phoenix cadence, so a fallback run targets the same partition the
+server's schedule would have), not the BSD `date` binary, and invoked via the
+`python -m` module form so a stale venv entry-point can't break unattended
+runs. The job definitions live in the `JOBS` dict in that script.
 
 | Job      | Steps (in order)                                                                 | Assets materialized                                            |
 | -------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------- |
@@ -234,5 +254,6 @@ inspect assets, kick off manual runs, or view run history:
 uv run dagster dev
 ```
 
-The schedules in `schedules.py` show up there as usual; they are just no longer
-executed by a hosted scheduler — `launchd` owns unattended execution now.
+The schedules in `schedules.py` show up there as usual. Once started on the
+home server they own unattended execution; `launchd` is the manual fallback
+described in this document.
