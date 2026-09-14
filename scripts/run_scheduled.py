@@ -27,6 +27,7 @@ import socket
 import subprocess
 import time
 import urllib.request
+import zoneinfo
 from collections.abc import Callable
 from datetime import timedelta
 from pathlib import Path
@@ -61,15 +62,19 @@ def load_dotenv(env_path: Path) -> None:
 
 
 # Yesterday's partition, computed in Python. macOS ``date`` is BSD (different
-# flags from GNU), so we never shell out to it. Computed in UTC to match the
-# assets' DailyPartitionsDefinition (UTC) and the retired schedules'
-# execution_timezone="UTC" — so "yesterday" is always a valid partition key
-# regardless of the machine's local timezone or run hour.
-# NB: use datetime.timezone.utc (not datetime.UTC) — this stdlib-only script
-# runs under the macOS system python3 (3.9), which predates the datetime.UTC
-# alias (3.11+). ruff's UP017 assumes a newer interpreter, so it's suppressed.
+# flags from GNU), so we never shell out to it. Computed in America/Phoenix to
+# match the ingestion assets' shared DailyPartitionsDefinition
+# (assets/ingestion/partitions.py: INGESTION_PARTITIONS, timezone
+# "America/Phoenix") and the home-server schedules' 06:00-Phoenix cadence
+# (schedules.py: waga_daily_job_schedule) — so a manual/launchd-fallback run
+# of this script targets the same partition the Dagster schedule would have.
+# Phoenix (America/Phoenix) is UTC-7 year-round (no DST observed), so this is
+# just a fixed offset from UTC — zoneinfo handles it without a tz database
+# quirk to worry about.
+# NB: zoneinfo is stdlib since 3.9 (this script runs under the macOS system
+# python3, which is 3.9), so no third-party tz package is needed here.
 _YESTERDAY = (
-    datetime.datetime.now(datetime.timezone.utc).date()  # noqa: UP017
+    datetime.datetime.now(zoneinfo.ZoneInfo("America/Phoenix")).date()
     - timedelta(days=1)
 ).strftime("%Y-%m-%d")
 
