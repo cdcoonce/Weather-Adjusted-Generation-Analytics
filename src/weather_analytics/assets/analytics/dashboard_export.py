@@ -14,6 +14,7 @@ from typing import Any
 import polars as pl
 from dagster import (
     AssetExecutionContext,
+    AssetKey,
     DagsterError,
     Failure,
     MaterializeResult,
@@ -159,10 +160,17 @@ def _query_and_validate(
 @asset(
     name="waga_dashboard_export_build",
     group_name="dashboard",
+    # dagster-dbt keys each dbt model by its folder path relative to the
+    # models directory (e.g. AssetKey(["marts", "mart_asset_performance_daily"])),
+    # not by the bare model name. A bare-string dep here resolves to a
+    # different, non-materializable stand-in key and imposes no execution
+    # order against the real dbt asset — in production this let the export
+    # run before dbt rebuilt the marts. Must match the prefixed keys
+    # produced by ``waga_dbt_assets`` (see dbt_assets.py).
     deps=[
-        "mart_asset_performance_daily",
-        "mart_asset_weather_performance",
-        "dim_asset",
+        AssetKey(["marts", "mart_asset_performance_daily"]),
+        AssetKey(["marts", "mart_asset_weather_performance"]),
+        AssetKey(["marts", "dim_asset"]),
     ],
 )
 def waga_dashboard_export_build(

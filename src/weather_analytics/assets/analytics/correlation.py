@@ -6,7 +6,7 @@ WAGA.ANALYTICS schema in Snowflake.
 """
 
 import polars as pl
-from dagster import AssetExecutionContext, Failure, MaterializeResult, asset
+from dagster import AssetExecutionContext, AssetKey, Failure, MaterializeResult, asset
 
 from weather_analytics.lib.polars_utils import (
     add_lag_features,
@@ -24,7 +24,11 @@ _TARGET_TABLE = "WAGA.ANALYTICS.correlation_results"
 @asset(
     name="waga_correlation_analysis",
     group_name="waga_analytics",
-    deps=["mart_asset_performance_daily"],
+    # Must be the dagster-dbt-prefixed key (folder path + model name), not
+    # the bare model name — see dashboard_export.py for the full story on
+    # why a bare-string dep here would impose no execution-order
+    # constraint against the real dbt asset.
+    deps=[AssetKey(["marts", "mart_asset_performance_daily"])],
 )
 def waga_correlation_analysis(
     context: AssetExecutionContext,
