@@ -5,17 +5,20 @@ from collections.abc import Iterator
 import dlt
 from dagster import (
     AssetExecutionContext,
-    DailyPartitionsDefinition,
     Failure,
     MaterializeResult,
     asset,
 )
 
+from weather_analytics.assets.ingestion.partitions import INGESTION_PARTITIONS
 from weather_analytics.mock_data.generate_generation import ASSET_CONFIGS
 from weather_analytics.mock_data.generate_weather import generate_weather_data
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 
-WEATHER_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
+# Alias kept for backward compatibility with existing imports/tests — both
+# ingestion assets now share one DailyPartitionsDefinition (see
+# assets/ingestion/partitions.py).
+WEATHER_PARTITIONS = INGESTION_PARTITIONS
 
 # Must match len(ASSET_CONFIGS) so weather and generation assets
 # produce data for the same set of assets.
@@ -48,7 +51,7 @@ def _weather_dlt_resource(
 @asset(
     name="waga_weather_ingestion",
     group_name="waga_ingestion",
-    partitions_def=WEATHER_PARTITIONS,
+    partitions_def=INGESTION_PARTITIONS,
     op_tags={"dagster/concurrency_key": "waga_ingestion"},
 )
 def waga_weather_ingestion(

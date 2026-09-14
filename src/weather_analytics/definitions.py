@@ -1,8 +1,12 @@
 """Dagster Definitions for the Weather Analytics pipeline.
 
-This is the entry point Dagster loads — ``dagster dev`` for the local UI
-and the launchd-scheduled CLI runs (see ``docs/local-scheduling.md``).
-All assets, resources, schedules, and sensors are registered here.
+This is the entry point Dagster loads: the ``weather_analytics.definitions``
+gRPC code-location module served by ``dagster api grpc`` in the Docker image
+running on the Dagster OSS webserver/daemon (home server), and also
+``dagster dev`` for the local UI. All assets, resources, jobs, and
+schedules are registered here. The macOS launchd CLI runs
+(``scripts/run_scheduled.py``) remain a manual fallback — see
+``docs/local-scheduling.md``.
 """
 
 from __future__ import annotations
@@ -13,6 +17,7 @@ from dagster_dbt import DbtCliResource
 from weather_analytics.assets.analytics import (
     waga_correlation_analysis,
     waga_dashboard_export_build,
+    waga_dashboard_publish,
 )
 from weather_analytics.assets.dbt_assets import (
     DBT_PROFILES_DIR,
@@ -36,9 +41,10 @@ from weather_analytics.checks import (
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 from weather_analytics.resources.snowflake import WAGASnowflakeResource
 from weather_analytics.schedules import (
-    waga_daily_dbt_schedule,
-    waga_daily_ingestion_schedule,
-    waga_weekly_analytics_schedule,
+    waga_daily_job,
+    waga_daily_job_schedule,
+    waga_weekly_job,
+    waga_weekly_job_schedule,
 )
 
 defs = Definitions(
@@ -50,6 +56,7 @@ defs = Definitions(
             waga_dbt_assets,
             waga_correlation_analysis,
             waga_dashboard_export_build,
+            waga_dashboard_publish,
         ]
         if asset is not None
     ],
@@ -63,10 +70,10 @@ defs = Definitions(
         waga_weather_value_range_check,
         waga_generation_value_range_check,
     ],
+    jobs=[waga_daily_job, waga_weekly_job],
     schedules=[
-        waga_daily_ingestion_schedule,
-        waga_daily_dbt_schedule,
-        waga_weekly_analytics_schedule,
+        waga_daily_job_schedule,
+        waga_weekly_job_schedule,
     ],
     resources={
         "snowflake": WAGASnowflakeResource(

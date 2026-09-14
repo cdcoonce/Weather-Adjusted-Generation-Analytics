@@ -6,19 +6,22 @@ from datetime import date
 import dlt
 from dagster import (
     AssetExecutionContext,
-    DailyPartitionsDefinition,
     Failure,
     MaterializeResult,
     asset,
 )
 
+from weather_analytics.assets.ingestion.partitions import INGESTION_PARTITIONS
 from weather_analytics.mock_data.generate_generation import (
     ASSET_CONFIGS,
     generate_generation_data,
 )
 from weather_analytics.resources.dlt_resource import DltIngestionResource
 
-GENERATION_PARTITIONS = DailyPartitionsDefinition(start_date="2023-01-01")
+# Alias kept for backward compatibility with existing imports/tests — both
+# ingestion assets now share one DailyPartitionsDefinition (see
+# assets/ingestion/partitions.py).
+GENERATION_PARTITIONS = INGESTION_PARTITIONS
 
 # Warm-up lookback: simulate this many days before the partition so battery
 # SOC and the dispatch rank signal reach a realistic trajectory (see
@@ -61,7 +64,7 @@ def _generation_dlt_resource(
 @asset(
     name="waga_generation_ingestion",
     group_name="waga_ingestion",
-    partitions_def=GENERATION_PARTITIONS,
+    partitions_def=INGESTION_PARTITIONS,
     op_tags={"dagster/concurrency_key": "waga_ingestion"},
 )
 def waga_generation_ingestion(

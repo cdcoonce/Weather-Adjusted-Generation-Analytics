@@ -46,6 +46,14 @@ dev = [
     "ipykernel>=6.27.0",
     "jupyter>=1.0.0",
 ]
+# Docker code-location image only (see Dockerfile): the Dagster OSS
+# webserver/daemon on the home server uses DockerRunLauncher, which needs
+# dagster-docker; dagster-postgres backs the daemon's run/event-log storage.
+# Neither is needed for local dev or CI.
+deploy = [
+    "dagster-postgres==0.28.19",
+    "dagster-docker==0.28.19",
+]
 
 [build-system]
 requires = ["hatchling"]
