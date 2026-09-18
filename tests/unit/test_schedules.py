@@ -48,7 +48,7 @@ class TestDailyJobSchedule:
         # defers cron/timezone resolution to the job's partitioned assets) —
         # see TestResolvedDefinitions for the resolved cron/timezone.
         assert waga_daily_job_schedule.hour_of_day == 6
-        assert waga_daily_job_schedule.minute_of_hour == 0
+        assert waga_daily_job_schedule.minute_of_hour == 15
 
     def test_schedule_default_status_stopped(self) -> None:
         assert waga_daily_job_schedule.default_status == DefaultScheduleStatus.STOPPED
@@ -56,7 +56,7 @@ class TestDailyJobSchedule:
 
 @pytest.mark.unit
 class TestWeeklyJobSchedule:
-    """ScheduleDefinition(waga_weekly_job, cron_schedule="30 6 * * 1", ...)."""
+    """ScheduleDefinition(waga_weekly_job, cron_schedule="45 6 * * 1", ...)."""
 
     def test_name(self) -> None:
         assert waga_weekly_job.name == "waga_weekly_job"
@@ -68,7 +68,7 @@ class TestWeeklyJobSchedule:
         assert waga_weekly_job_schedule.name == "waga_weekly_job_schedule"
 
     def test_schedule_cron(self) -> None:
-        assert waga_weekly_job_schedule.cron_schedule == "30 6 * * 1"
+        assert waga_weekly_job_schedule.cron_schedule == "45 6 * * 1"
 
     def test_schedule_timezone(self) -> None:
         assert waga_weekly_job_schedule.execution_timezone == "America/Phoenix"
@@ -91,7 +91,31 @@ class TestResolvedDefinitions:
         resolved = repo.schedule_defs
         daily = next(s for s in resolved if s.name == "waga_daily_job_schedule")
         assert daily.execution_timezone == "America/Phoenix"
-        assert daily.cron_schedule == "0 6 * * *"
+        assert daily.cron_schedule == "15 6 * * *"
+
+    def test_schedules_stay_off_the_other_tenants_slots(self) -> None:
+        """The rammingspeed host runs this code location alongside
+        oura-pipeline on ONE run slot (dagster.yaml QueuedRunCoordinator
+        max_concurrent_runs: 1). oura holds `0 6 * * *` for its daily and
+        `30 6 * * 1` for its weekly, both America/Phoenix. Sharing either
+        instant is not a failure -- the loser just sits PIPELINE_ENQUEUED --
+        but it makes a SUCCESS tick ambiguous about whether its run started,
+        so these two must not reclaim those slots. If this fails because the
+        times moved deliberately, check oura's crons before editing it.
+        """
+        oura_daily_cron = "0 6 * * *"
+        oura_weekly_cron = "30 6 * * 1"
+
+        repo = defs.get_repository_def()
+        daily = next(
+            s for s in repo.schedule_defs if s.name == "waga_daily_job_schedule"
+        )
+        assert daily.cron_schedule != oura_daily_cron
+        assert waga_weekly_job_schedule.cron_schedule != oura_weekly_cron
+
+        # Same timezone, so the comparison above is apples-to-apples.
+        assert daily.execution_timezone == "America/Phoenix"
+        assert waga_weekly_job_schedule.execution_timezone == "America/Phoenix"
 
     def test_daily_job_resolves_without_manifest(self) -> None:
         """CI has no dbt manifest.json — group:default is then empty, and the

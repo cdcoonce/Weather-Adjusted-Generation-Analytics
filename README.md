@@ -103,9 +103,9 @@ as a Docker gRPC code location (`Dockerfile`, `DockerRunLauncher` — every run
 is a fresh container). Two Dagster schedules (both `America/Phoenix`,
 default **stopped** until started at cutover):
 
-- `waga_daily_job_schedule` — 06:00 daily: ingestion -> dbt -> dashboard
+- `waga_daily_job_schedule` — 06:15 daily: ingestion -> dbt -> dashboard
   export -> dashboard publish (Cloudflare Pages), as one job.
-- `waga_weekly_job_schedule` — 06:30 Monday: the correlation analysis.
+- `waga_weekly_job_schedule` — 06:45 Monday: the correlation analysis.
 
 Fallback path (manual only — **must not run while the server's schedules are
 active**, both write to the same Snowflake partitions): macOS `launchd`
