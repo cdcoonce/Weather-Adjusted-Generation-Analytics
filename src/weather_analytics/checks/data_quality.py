@@ -30,12 +30,28 @@ CAPACITY_FACTOR_MIN: float = 0.0
 CAPACITY_FACTOR_MAX: float = 1.0
 
 
+# ---------------------------------------------------------------------------
+# dbt-produced asset keys
+# ---------------------------------------------------------------------------
+# dagster-dbt keys each dbt model by its folder path relative to the models
+# directory, so a check on a dbt-built table must name that prefixed key.
+# ``waga_dbt_assets`` is the AssetsDefinition/op name, *not* an asset key: a
+# check pointed at it attaches to a phantom, non-materializable key that no
+# asset-selecting job ever contains, so the check silently never runs (this
+# cost five of the eight checks on the first server run of
+# ``waga_daily_job``). Same root cause as the ``deps=`` bug fixed in
+# ``dashboard_export.py`` / ``correlation.py``.
+STG_WEATHER_KEY = AssetKey(["staging", "stg_weather"])
+STG_GENERATION_KEY = AssetKey(["staging", "stg_generation"])
+MART_PERFORMANCE_DAILY_KEY = AssetKey(["marts", "mart_asset_performance_daily"])
+
+
 # ===================================================================
 # Freshness checks
 # ===================================================================
 
 
-@asset_check(asset=AssetKey(["waga_dbt_assets"]), name="waga_weather_freshness_check")
+@asset_check(asset=STG_WEATHER_KEY, name="waga_weather_freshness_check")
 def waga_weather_freshness_check(
     snowflake: WAGASnowflakeResource,
 ) -> AssetCheckResult:
@@ -69,9 +85,7 @@ def waga_weather_freshness_check(
         conn.close()
 
 
-@asset_check(
-    asset=AssetKey(["waga_dbt_assets"]), name="waga_generation_freshness_check"
-)
+@asset_check(asset=STG_GENERATION_KEY, name="waga_generation_freshness_check")
 def waga_generation_freshness_check(
     snowflake: WAGASnowflakeResource,
 ) -> AssetCheckResult:
@@ -133,7 +147,7 @@ def waga_raw_generation_row_count_check(
 
 
 @asset_check(
-    asset=AssetKey(["waga_dbt_assets"]),
+    asset=MART_PERFORMANCE_DAILY_KEY,
     name="waga_mart_performance_row_count_check",
 )
 def waga_mart_performance_row_count_check(
@@ -202,7 +216,7 @@ def _row_count_check(
 
 
 @asset_check(
-    asset=AssetKey(["waga_dbt_assets"]),
+    asset=STG_WEATHER_KEY,
     name="waga_weather_value_range_check",
 )
 def waga_weather_value_range_check(
@@ -238,7 +252,7 @@ def waga_weather_value_range_check(
 
 
 @asset_check(
-    asset=AssetKey(["waga_dbt_assets"]),
+    asset=STG_GENERATION_KEY,
     name="waga_generation_value_range_check",
 )
 def waga_generation_value_range_check(
