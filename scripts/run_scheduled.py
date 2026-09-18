@@ -65,7 +65,7 @@ def load_dotenv(env_path: Path) -> None:
 # flags from GNU), so we never shell out to it. Computed in America/Phoenix to
 # match the ingestion assets' shared DailyPartitionsDefinition
 # (assets/ingestion/partitions.py: INGESTION_PARTITIONS, timezone
-# "America/Phoenix") and the home-server schedules' 06:00-Phoenix cadence
+# "America/Phoenix") and the home-server schedules' 06:15-Phoenix cadence
 # (schedules.py: waga_daily_job_schedule) — so a manual/launchd-fallback run
 # of this script targets the same partition the Dagster schedule would have.
 # Phoenix (America/Phoenix) is UTC-7 year-round (no DST observed), so this is

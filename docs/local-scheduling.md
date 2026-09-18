@@ -7,9 +7,12 @@ rammingspeed home server**, with this repo shipped as a Docker gRPC code
 location (`Dockerfile`, `DockerRunLauncher`). Two Dagster schedules in
 `src/weather_analytics/schedules.py`, both `America/Phoenix`:
 
-- `waga_daily_job_schedule` — 06:00 daily (ingestion -> dbt -> dashboard
+- `waga_daily_job_schedule` — 06:15 daily (ingestion -> dbt -> dashboard
   export -> dashboard publish, one job).
-- `waga_weekly_job_schedule` — 06:30 Monday (correlation analysis).
+- `waga_weekly_job_schedule` — 06:45 Monday (correlation analysis).
+
+Both are staggered off the rammingspeed host's other tenant, oura-pipeline,
+which holds 06:00 daily and 06:30 Monday on the same single run slot.
 
 Both ship `default_status=DefaultScheduleStatus.STOPPED` and are started on
 the server once the image is verified there — at that point they, not
@@ -36,7 +39,7 @@ Each launchd agent runs `scripts/run_scheduled.py <job>`, which chains one or
 more `uv run python -m dagster asset materialize` steps against **yesterday's**
 partition — computed in Python (`America/Phoenix`, matching the ingestion
 assets' shared `INGESTION_PARTITIONS` timezone and the server schedules'
-06:00-Phoenix cadence, so a fallback run targets the same partition the
+06:15-Phoenix cadence, so a fallback run targets the same partition the
 server's schedule would have), not the BSD `date` binary, and invoked via the
 `python -m` module form so a stale venv entry-point can't break unattended
 runs. The job definitions live in the `JOBS` dict in that script.
