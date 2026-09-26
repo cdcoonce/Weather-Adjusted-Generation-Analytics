@@ -55,6 +55,15 @@ deploy = [
     "dagster-docker==0.28.19",
 ]
 
+# SQLAlchemy 2.1 makes psycopg (v3) the default driver for a bare
+# postgresql:// URL, but dagster-postgres builds exactly that URL and ships
+# psycopg2 (psycopg2-binary) — with SQLAlchemy >= 2.1 the deploy extra's
+# dagster-postgres storage fails with `ModuleNotFoundError: No module named
+# 'psycopg'` (see cdcoonce/rammingspeed#2). Pin below 2.1 until
+# dagster-postgres supports psycopg3 or pins its own driver explicitly.
+[tool.uv]
+constraint-dependencies = ["sqlalchemy<2.1"]
+
 [build-system]
 requires = ["hatchling"]
 build-backend = "hatchling.build"
